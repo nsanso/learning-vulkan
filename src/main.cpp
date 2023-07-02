@@ -1,5 +1,4 @@
 #include "SDL.h"
-#include "SDL_log.h"
 
 int main(int argc, char *argv[]) {
   SDL_Window *window;

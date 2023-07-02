@@ -1,11 +1,13 @@
-project(
-  'learning-vulkan', 
-  'cpp',
-  default_options: 'default_library=static')
+project('learning-vulkan', 'cpp')
 
-sdl2_dep = dependency('sdl2')
+cmake = import('cmake')
+
+deps = [
+  cmake.subproject('SDL').dependency('SDL2-static'),
+]
 
 executable(
   'learning-vulkan', 
   'src/main.cpp',
-  dependencies: sdl2_dep)
+  dependencies: deps,
+  )
