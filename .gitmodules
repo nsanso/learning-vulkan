@@ -1,8 +1,0 @@
-[submodule "vendor/SDL"]
-	path = subprojects/SDL
-	url = git@github.com:libsdl-org/SDL.git
-	branch = release-2.28.x
-[submodule "subprojects/SDL"]
-	path = subprojects/SDL
-	url = git@github.com:libsdl-org/SDL.git
-	branch = release-2.28.x

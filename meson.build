@@ -3,11 +3,21 @@ project('learning-vulkan', 'cpp')
 cmake = import('cmake')
 
 deps = [
-  cmake.subproject('SDL').dependency('SDL2-static'),
-]
+  dependency('SDL2'),
+  dependency('vulkan'),
+  dependency('threads'),
+  ]
+
+srcs = files([
+  'src/main.cpp',
+  'src/throwaway.cpp',
+  'src/vk_engine.cpp',
+  'src/vk_init.cpp',
+  ])
+
 
 executable(
-  'learning-vulkan', 
-  'src/main.cpp',
-  dependencies: deps,
-  )
+  'learning-vulkan',
+  srcs,
+  dependencies : deps
+)
