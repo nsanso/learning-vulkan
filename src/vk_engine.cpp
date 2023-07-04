@@ -6,7 +6,6 @@
 #include <vulkan/vulkan_core.h>
 
 #include <cstdio>
-#include <iostream>
 
 #include "vk_init.h"
 #include "vk_types.h"
@@ -63,7 +62,7 @@ void VulkanEngine::init() {
     m_swapchain_image_views = swapchain.get_image_views().value();
 
     m_is_initialized = true;
-    std::cout << "VulkanEngine init_vulkan OK" << std::endl;
+    printf("VulkanEngine::init OK\n");
 }
 
 void VulkanEngine::cleanup() {
@@ -82,6 +81,7 @@ void VulkanEngine::cleanup() {
     vkb::destroy_debug_utils_messenger(m_instance, m_debug_messenger);
     vkDestroyInstance(m_instance, nullptr);
     SDL_DestroyWindow(m_window);
+    printf("VulkanEngine::cleanup OK\n");
 }
 
 void VulkanEngine::run() {
