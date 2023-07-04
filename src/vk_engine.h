@@ -1,8 +1,10 @@
 #pragma once
 
-#include <vector>
+#include <SDL.h>
+#include <SDL_vulkan.h>
+#include <VkBootstrap.h>
 
-#include "vk_types.h"
+#include <cstdio>
 
 class VulkanEngine {
    public:
@@ -14,19 +16,29 @@ class VulkanEngine {
     void run();
 
    private:
-    size_t m_frame_number{0};
+    size_t m_frame_count{0};
 
-    bool m_is_initialized{false};
+    bool m_initialized{false};
 
     VkExtent2D m_window_extent{1280, 720};
     struct SDL_Window *m_window{nullptr};
-    VkInstance m_instance;
-    VkDebugUtilsMessengerEXT m_debug_messenger;
+
+    vkb::Instance m_instance;
     VkSurfaceKHR m_surface;
-    VkPhysicalDevice m_gpu;
-    VkDevice m_device;
-    VkSwapchainKHR m_swapchain;  // from other articles
-    VkFormat m_swapchain_image_format;
+
+    vkb::PhysicalDevice m_gpu;
+    vkb::Device m_device;
+
+    vkb::Swapchain m_swapchain;
     std::vector<VkImage> m_swapchain_images;
-    std::vector<VkImageView> m_swapchain_image_views;
+    std::vector<VkImageView> m_swapchain_views;
+
+    VkQueue m_q_graphics;
+    uint32_t m_qfamily_graphics;
+
+    VkCommandPool m_cmd_pool;
+    VkCommandBuffer m_cmd_buf;
+
+    VkRenderPass m_render_pass;
+    std::vector<VkFramebuffer> m_frame_bufs;
 };
