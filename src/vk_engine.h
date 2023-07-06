@@ -41,4 +41,8 @@ class VulkanEngine {
 
     VkRenderPass m_render_pass;
     std::vector<VkFramebuffer> m_frame_bufs;
+
+    VkSemaphore m_semph_present;
+    VkSemaphore m_semph_render;
+    VkFence m_fence_render;
 };

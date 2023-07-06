@@ -56,7 +56,7 @@ void VulkanEngine::init() {
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = m_qfamily_graphics,
     };
-    vk_check(vkCreateCommandPool(m_device.device, &command_pool_info, nullptr,
+    vk_check(vkCreateCommandPool(m_device, &command_pool_info, nullptr,
                                  &m_cmd_pool));
 
     // Get Command buffer
@@ -66,8 +66,8 @@ void VulkanEngine::init() {
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    vk_check(vkAllocateCommandBuffers(m_device.device, &cmdbuf_alloc_info,
-                                      &m_cmd_buf));
+    vk_check(
+        vkAllocateCommandBuffers(m_device, &cmdbuf_alloc_info, &m_cmd_buf));
 
     // Get Render pass
     VkAttachmentDescription color_attachment{
@@ -99,7 +99,7 @@ void VulkanEngine::init() {
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
-    vk_check(vkCreateRenderPass(m_device.device, &render_pass_info, nullptr,
+    vk_check(vkCreateRenderPass(m_device, &render_pass_info, nullptr,
                                 &m_render_pass));
 
     // Get Frame buffer
@@ -117,9 +117,24 @@ void VulkanEngine::init() {
 
     for (size_t i = 0; i < m_swapchain_images.size(); i++) {
         fb_info.pAttachments = &m_swapchain_views[i];
-        vk_check(vkCreateFramebuffer(m_device.device, &fb_info, nullptr,
-                                     &m_frame_bufs[i]));
+        vk_check(
+            vkCreateFramebuffer(m_device, &fb_info, nullptr, &m_frame_bufs[i]));
     }
+
+    // Create Synchronization structures
+    VkFenceCreateInfo fence_info{
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+    };
+    vk_check(vkCreateFence(m_device, &fence_info, nullptr, &m_fence_render));
+
+    VkSemaphoreCreateInfo semph_info{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    vk_check(
+        vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_present));
+    vk_check(
+        vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
 
     // done
     m_initialized = true;
@@ -132,12 +147,12 @@ void VulkanEngine::cleanup() {
         return;
     }
     // Destroy in the inverse order of creation
-    vkDestroyCommandPool(m_device.device, m_cmd_pool, nullptr);
+    vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
     vkb::destroy_swapchain(m_swapchain);
-    vkDestroyRenderPass(m_device.device, m_render_pass, nullptr);
+    vkDestroyRenderPass(m_device, m_render_pass, nullptr);
     for (size_t i = 0; i < m_frame_bufs.size(); i++) {
-        vkDestroyFramebuffer(m_device.device, m_frame_bufs[i], nullptr);
-        vkDestroyImageView(m_device.device, m_swapchain_views[i], nullptr);
+        vkDestroyFramebuffer(m_device, m_frame_bufs[i], nullptr);
+        vkDestroyImageView(m_device, m_swapchain_views[i], nullptr);
     }
     vkb::destroy_device(m_device);
     vkb::destroy_surface(m_instance, m_surface);
@@ -163,7 +178,81 @@ run_QUIT:
     return;
 }
 
-void VulkanEngine::draw() {}
+void VulkanEngine::draw() {
+    int64_t one_second_ns = 1'000'000'000;
+
+    vk_check(
+        vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
+    vk_check(vkResetFences(m_device, 1, &m_fence_render));
+
+    uint32_t swap_img_idx;
+    vk_check(vkAcquireNextImageKHR(m_device, m_swapchain, one_second_ns,
+                                   m_semph_present, nullptr, &swap_img_idx));
+
+    // now that we are sure that the commands finished executing, we can safely
+    // reset the command buffer to begin recording again.
+    vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
+
+    VkCommandBufferBeginInfo cmd_begin_info{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+    };
+    vk_check(vkBeginCommandBuffer(m_cmd_buf, &cmd_begin_info));
+
+    // make a clear-color from frame number. This will flash with a 120*pi frame
+    // period.
+    float flash = abs(sin(m_frame_count / 120.f));
+    VkClearValue clear_value{
+        .color = {.float32{0.0f, 0.0f, flash, 1.0f}},
+    };
+
+    // start the main renderpass.
+    VkRenderPassBeginInfo renderpass_begin_info{
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = m_render_pass,
+        .framebuffer = m_frame_bufs[swap_img_idx],
+        .renderArea{
+            .extent = m_window_extent,
+        },
+        .clearValueCount = 1,
+        .pClearValues = &clear_value,
+    };
+    vkCmdBeginRenderPass(m_cmd_buf, &renderpass_begin_info,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    // TODO: render stuff here
+
+    // finalize the render pass and the command buffer
+    vkCmdEndRenderPass(m_cmd_buf);
+    vk_check(vkEndCommandBuffer(m_cmd_buf));
+
+    // prepare the submission to the queue.
+    VkPipelineStageFlags wait_stage =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    VkSubmitInfo submit{
+        .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &m_semph_present,
+        .pWaitDstStageMask = &wait_stage,  // you'll learn about this later
+        .commandBufferCount = 1,
+        .pCommandBuffers = &m_cmd_buf,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &m_semph_render,
+    };
+    vk_check(vkQueueSubmit(m_q_graphics, 1, &submit, m_fence_render));
+
+    VkPresentInfoKHR present_info{
+        .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &m_semph_render,
+        .swapchainCount = 1,
+        .pSwapchains = &m_swapchain.swapchain,
+        .pImageIndices = &swap_img_idx,
+    };
+    vk_check(vkQueuePresentKHR(m_q_graphics, &present_info));
+
+    m_frame_count++;
+}
 
 VkResult vk_check(VkResult err) {
     if (err) {
