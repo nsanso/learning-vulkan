@@ -1,5 +1,7 @@
 #include "vk_engine.h"
 
+const int64_t one_second_ns = 1'000'000'000;
+
 // Forward declarations
 template <typename T>
 const T &vkb_value_or_abort(vkb::Result<T> res);
@@ -146,7 +148,14 @@ void VulkanEngine::cleanup() {
         printf("VulkanEngine::cleanup: not initialized\n");
         return;
     }
+    // Wait for the gpu to finish the pending work
+    vk_check(
+        vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
+
     // Destroy in the inverse order of creation
+    vkDestroySemaphore(m_device, m_semph_render, nullptr);
+    vkDestroySemaphore(m_device, m_semph_present, nullptr);
+    vkDestroyFence(m_device, m_fence_render, nullptr);
     vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
     vkb::destroy_swapchain(m_swapchain);
     vkDestroyRenderPass(m_device, m_render_pass, nullptr);
@@ -179,8 +188,6 @@ run_QUIT:
 }
 
 void VulkanEngine::draw() {
-    int64_t one_second_ns = 1'000'000'000;
-
     vk_check(
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
     vk_check(vkResetFences(m_device, 1, &m_fence_render));
