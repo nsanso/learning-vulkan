@@ -13,13 +13,31 @@ deps = [
   vk_bootstrap.dependency('vk-bootstrap'),
   ]
 
+
+shaders = [
+	'src/shaders/triangle.vert',
+	'src/shaders/triangle.frag',
+]
+
+shader_headers = []
+glslang = find_program('glslangValidator')
+foreach shader : shaders
+	name = shader.underscorify() + '_data'
+	args = [glslang, '-V', '@INPUT@', '-o', '@OUTPUT@', '--vn', name]
+	header = custom_target(
+		shader + '_spv',
+		output: shader + '.h',
+		input: shader,
+		command: args)
+	shader_headers += [header]
+endforeach
+
 srcs = files([
   'src/main.cpp',
-  'src/throwaway.cpp',
-  'src/vk_engine.cpp',
-  'src/vk_init.cpp',
+  'src/engine/vk_engine.cpp',
+  'src/engine/vk_init.cpp',
+  shader_headers,
   ])
-
 
 executable(
   'learning-vulkan',

@@ -1,12 +1,11 @@
-#include "vk_engine.h"
+#include "engine/vk_engine.h"
 
 int main(int argc, char *argv[]) {
+    VulkanEngine engine;
 
-  VulkanEngine engine;
+    engine.init();
+    engine.run();
+    engine.cleanup();
 
-  engine.init();
-  engine.run();
-  engine.cleanup();
-
-  return 0;
+    return 0;
 }
