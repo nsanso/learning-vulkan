@@ -45,4 +45,6 @@ class VulkanEngine {
     VkSemaphore m_semph_present;
     VkSemaphore m_semph_render;
     VkFence m_fence_render;
+
+    bool load_shader(const uint32_t buffer[], size_t size, VkShaderModule *out);
 };

@@ -1,11 +1,15 @@
 #include "vk_engine.h"
 
+#include <triangle.frag.h>
+#include <triangle.vert.h>
+#include <vulkan/vulkan_core.h>
+
 const int64_t one_second_ns = 1'000'000'000;
 
 // Forward declarations
 template <typename T>
 const T &vkb_value_or_abort(vkb::Result<T> res);
-VkResult vk_check(VkResult err);
+void vk_check(VkResult err);
 
 // public
 void VulkanEngine::init() {
@@ -138,6 +142,16 @@ void VulkanEngine::init() {
     vk_check(
         vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
 
+    // Load shaders -- VERSION FOR TESTING COMPILATION --
+    VkShaderModule shader_triangle_vert;
+    VkShaderModule shader_triangle_frag;
+
+    load_shader(triangle_vert, sizeof(triangle_vert), &shader_triangle_vert);
+    load_shader(triangle_frag, sizeof(triangle_frag), &shader_triangle_frag);
+
+    vkDestroyShaderModule(m_device, shader_triangle_vert, nullptr);
+    vkDestroyShaderModule(m_device, shader_triangle_frag, nullptr);
+
     // done
     m_initialized = true;
     printf("VulkanEngine::init OK\n");
@@ -261,12 +275,23 @@ void VulkanEngine::draw() {
     m_frame_count++;
 }
 
-VkResult vk_check(VkResult err) {
+bool VulkanEngine::load_shader(const uint32_t buffer[], size_t size,
+                               VkShaderModule *out) {
+    VkShaderModuleCreateInfo createInfo{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = size,
+        .pCode = buffer,
+    };
+
+    vk_check(vkCreateShaderModule(m_device, &createInfo, nullptr, out));
+    return true;
+}
+
+void vk_check(VkResult err) {
     if (err) {
         printf("Detected Vulkan error: %d\n", err);
         abort();
     }
-    return err;
 }
 
 template <typename T>
