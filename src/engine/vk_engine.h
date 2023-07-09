@@ -46,5 +46,11 @@ class VulkanEngine {
     VkSemaphore m_semph_render;
     VkFence m_fence_render;
 
+    VkShaderModule m_vertex_shader;
+    VkShaderModule m_fragment_shader;
+
+    VkPipeline m_pipe;
+    VkPipelineLayout m_pipelayout;
+
     bool load_shader(const uint32_t buffer[], size_t size, VkShaderModule *out);
 };

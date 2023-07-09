@@ -142,15 +142,101 @@ void VulkanEngine::init() {
     vk_check(
         vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
 
-    // Load shaders -- VERSION FOR TESTING COMPILATION --
-    VkShaderModule shader_triangle_vert;
-    VkShaderModule shader_triangle_frag;
+    // Load shaders
+    load_shader(triangle_vert, sizeof(triangle_vert), &m_vertex_shader);
 
-    load_shader(triangle_vert, sizeof(triangle_vert), &shader_triangle_vert);
-    load_shader(triangle_frag, sizeof(triangle_frag), &shader_triangle_frag);
+    load_shader(triangle_frag, sizeof(triangle_frag), &m_fragment_shader);
 
-    vkDestroyShaderModule(m_device, shader_triangle_vert, nullptr);
-    vkDestroyShaderModule(m_device, shader_triangle_frag, nullptr);
+    VkPipelineShaderStageCreateInfo shader_stages[]{
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = m_vertex_shader,
+            .pName = "main",
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = m_fragment_shader,
+            .pName = "main",
+        },
+    };
+    uint32_t shader_stages_count =
+        sizeof(shader_stages) / sizeof(shader_stages[0]);
+
+    // Create the pipeline
+    VkViewport viewport{
+        .width = (float)m_window_extent.width,
+        .height = (float)m_window_extent.height,
+        .minDepth = 0.f,
+        .maxDepth = 1.f,
+    };
+    VkRect2D scissor{.extent = m_window_extent};
+
+    VkPipelineVertexInputStateCreateInfo vertexinput_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo inputassembly_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    };
+
+    VkPipelineRasterizationStateCreateInfo rasterization_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .lineWidth = 1.0f,
+    };
+
+    VkPipelineMultisampleStateCreateInfo multisample_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .minSampleShading = 1.0f,
+    };
+
+    VkPipelineColorBlendAttachmentState colorblend_attachment{
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
+    };
+
+    VkPipelineViewportStateCreateInfo viewport_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .pViewports = &viewport,
+        .scissorCount = 1,
+        .pScissors = &scissor,
+    };
+
+    VkPipelineColorBlendStateCreateInfo colorblend_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOp =
+            VK_LOGIC_OP_COPY,  // probably not used as .logicOpEnable is falsy
+        .attachmentCount = 1,
+        .pAttachments = &colorblend_attachment,
+    };
+
+    VkPipelineLayoutCreateInfo pipelayout_triangle_info{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    };
+    vk_check(vkCreatePipelineLayout(m_device, &pipelayout_triangle_info,
+                                    nullptr, &m_pipelayout));
+
+    VkGraphicsPipelineCreateInfo pipe_info{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = shader_stages_count,  // todo
+        .pStages = shader_stages,           // todo
+        .pVertexInputState = &vertexinput_info,
+        .pInputAssemblyState = &inputassembly_info,
+        .pViewportState = &viewport_info,
+        .pRasterizationState = &rasterization_info,
+        .pMultisampleState = &multisample_info,
+        .pColorBlendState = &colorblend_info,
+        .layout = m_pipelayout,
+        .renderPass = m_render_pass,
+    };
+    vk_check(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipe_info,
+                                       nullptr, &m_pipe));
 
     // done
     m_initialized = true;
@@ -167,6 +253,10 @@ void VulkanEngine::cleanup() {
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
 
     // Destroy in the inverse order of creation
+    vkDestroyPipeline(m_device, m_pipe, nullptr);
+    vkDestroyPipelineLayout(m_device, m_pipelayout, nullptr);
+    vkDestroyShaderModule(m_device, m_vertex_shader, nullptr);
+    vkDestroyShaderModule(m_device, m_fragment_shader, nullptr);
     vkDestroySemaphore(m_device, m_semph_render, nullptr);
     vkDestroySemaphore(m_device, m_semph_present, nullptr);
     vkDestroyFence(m_device, m_fence_render, nullptr);
@@ -241,7 +331,9 @@ void VulkanEngine::draw() {
     vkCmdBeginRenderPass(m_cmd_buf, &renderpass_begin_info,
                          VK_SUBPASS_CONTENTS_INLINE);
 
-    // TODO: render stuff here
+    // Draw
+    vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipe);
+    vkCmdDraw(m_cmd_buf, 3, 1, 0, 0);
 
     // finalize the render pass and the command buffer
     vkCmdEndRenderPass(m_cmd_buf);
