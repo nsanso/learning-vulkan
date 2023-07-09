@@ -310,14 +310,7 @@ void VulkanEngine::draw() {
     };
     vk_check(vkBeginCommandBuffer(m_cmd_buf, &cmd_begin_info));
 
-    // make a clear-color from frame number. This will flash with a 120*pi frame
-    // period.
-    float flash = abs(sin(m_frame_count / 120.f));
-    VkClearValue clear_value{
-        .color = {.float32{0.0f, 0.0f, flash, 1.0f}},
-    };
-
-    // start the main renderpass.
+    VkClearValue clear_value{.color{.float32{.0f, 0.f, 0.f, 1.f}}};
     VkRenderPassBeginInfo renderpass_begin_info{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = m_render_pass,
