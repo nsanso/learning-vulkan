@@ -32,7 +32,6 @@ endforeach
 srcs = [
   'src/main.cpp',
   'src/engine/vk_engine.cpp',
-  'src/engine/vk_init.cpp',
   shader_targets,
   ]
 
