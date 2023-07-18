@@ -5,11 +5,15 @@ cmake = import('cmake')
 vk_bootstrap = cmake.subproject('vk-bootstrap')
 message('CMake targets:\n - ' + '\n - '.join(vk_bootstrap.target_list()))
 
+vma = cmake.subproject('VulkanMemoryAllocator')
+message('CMake targets:\n - ' + '\n - '.join(vma.target_list()))
+
 deps = [
   dependency('SDL2'),
   dependency('vulkan'),
   dependency('threads'),
   vk_bootstrap.dependency('vk-bootstrap'),
+  vma.dependency('VulkanMemoryAllocator'),
   ]
 
 shaders = [
