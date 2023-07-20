@@ -10,5 +10,6 @@ at [vkguide.dev](https://vkguide.dev), with some differences here and there.
 
 ## Required tools
 
-- Git (obviously)
-- Meson
+- Git
+- cmake
+- glslangValidator

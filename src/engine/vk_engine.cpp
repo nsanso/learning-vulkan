@@ -1,7 +1,7 @@
 #include "vk_engine.h"
 
-#include <triangle.frag.h>
-#include <triangle.vert.h>
+#include <src/shaders/triangle.frag.h>
+#include <src/shaders/triangle.vert.h>
 #include <vulkan/vulkan_core.h>
 
 const int64_t one_second_ns = 1'000'000'000;
