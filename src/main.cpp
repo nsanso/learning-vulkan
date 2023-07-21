@@ -1,7 +1,7 @@
-#include "engine/vk_engine.h"
+#include "engine/engine.h"
 
 int main(int argc, char *argv[]) {
-    VulkanEngine engine;
+    Engine engine;
 
     engine.init();
     engine.run();

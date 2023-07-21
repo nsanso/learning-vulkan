@@ -1,8 +1,15 @@
-#include "vk_engine.h"
+#include "engine.h"
 
+#include <src/shaders/mesh.vert.h>
 #include <src/shaders/triangle.frag.h>
-#include <src/shaders/triangle.vert.h>
 #include <vulkan/vulkan_core.h>
+
+#include "utils.h"
+
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
+#include <cstdio>
 
 const int64_t one_second_ns = 1'000'000'000;
 
@@ -12,7 +19,7 @@ const T &vkb_value_or_abort(vkb::Result<T> res);
 void vk_check(VkResult err);
 
 // public
-void VulkanEngine::init() {
+void Engine::init() {
     // Get window
     SDL_InitSubSystem(SDL_INIT_VIDEO);
     m_window = SDL_CreateWindow("Learning Vulkan", SDL_WINDOWPOS_UNDEFINED,
@@ -143,8 +150,7 @@ void VulkanEngine::init() {
         vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
 
     // Load shaders
-    load_shader(triangle_vert, sizeof(triangle_vert), &m_vertex_shader);
-
+    load_shader(mesh_vert, sizeof(mesh_vert), &m_vertex_shader);
     load_shader(triangle_frag, sizeof(triangle_frag), &m_fragment_shader);
 
     VkPipelineShaderStageCreateInfo shader_stages[]{
@@ -175,6 +181,12 @@ void VulkanEngine::init() {
 
     VkPipelineVertexInputStateCreateInfo vertexinput_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount =
+            sizeof(VertexInputDescription.bindings),
+        .pVertexBindingDescriptions = VertexInputDescription.bindings,
+        .vertexAttributeDescriptionCount =
+            sizeof(VertexInputDescription.attributes),
+        .pVertexAttributeDescriptions = VertexInputDescription.attributes,
     };
 
     VkPipelineInputAssemblyStateCreateInfo inputassembly_info{
@@ -236,14 +248,48 @@ void VulkanEngine::init() {
         .renderPass = m_render_pass,
     };
     vk_check(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipe_info,
-                                       nullptr, &m_pipe));
+                                       nullptr, &m_pipeline));
+
+    // create allocator
+    VmaAllocatorCreateInfo allocator_info{
+        .physicalDevice = m_gpu,
+        .device = m_device,
+        .instance = m_instance,
+    };
+    vmaCreateAllocator(&allocator_info, &m_allocator);
+
+    // load mesh
+    m_mesh.vertices = {
+        Vertex{.position{0.f, -1.f, 0.f}, .color{1.f, 0.f, 0.f}},
+        Vertex{.position{1.f, 0.f, 0.f}, .color{0.f, 1.f, 0.f}},
+        Vertex{.position{0.f, 1.f, 0.f}, .color{0.f, 0.f, 1.f}},
+        Vertex{.position{-1.f, 0.f, 0.f}, .color{0.f, 0.f, 0.f}},
+    };
+
+    VkBufferCreateInfo buffer_info{
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = m_mesh.vertices.size() * sizeof(Vertex),
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
+
+    VmaAllocationCreateInfo allocation_info{
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO,
+    };
+    vk_check(vmaCreateBuffer(m_allocator, &buffer_info, &allocation_info,
+                             &m_mesh.vertex_buffer.buffer,
+                             &m_mesh.vertex_buffer.allocation, nullptr));
+    void *data;
+    vmaMapMemory(m_allocator, m_mesh.vertex_buffer.allocation, &data);
+    memcpy(data, m_mesh.vertices.data(),
+           m_mesh.vertices.size() * sizeof(Vertex));
+    vmaUnmapMemory(m_allocator, m_mesh.vertex_buffer.allocation);
 
     // done
     m_initialized = true;
     printf("VulkanEngine::init OK\n");
 }
 
-void VulkanEngine::cleanup() {
+void Engine::cleanup() {
     if (!m_initialized) {
         printf("VulkanEngine::cleanup: not initialized\n");
         return;
@@ -253,7 +299,10 @@ void VulkanEngine::cleanup() {
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
 
     // Destroy in the inverse order of creation
-    vkDestroyPipeline(m_device, m_pipe, nullptr);
+    vmaDestroyBuffer(m_allocator, m_mesh.vertex_buffer.buffer,
+                     m_mesh.vertex_buffer.allocation);
+    vmaDestroyAllocator(m_allocator);
+    vkDestroyPipeline(m_device, m_pipeline, nullptr);
     vkDestroyPipelineLayout(m_device, m_pipelayout, nullptr);
     vkDestroyShaderModule(m_device, m_vertex_shader, nullptr);
     vkDestroyShaderModule(m_device, m_fragment_shader, nullptr);
@@ -275,7 +324,7 @@ void VulkanEngine::cleanup() {
     printf("VulkanEngine::cleanup OK\n");
 }
 
-void VulkanEngine::run() {
+void Engine::run() {
     SDL_Event event;
 
     while (true) {
@@ -291,7 +340,7 @@ run_QUIT:
     return;
 }
 
-void VulkanEngine::draw() {
+void Engine::draw() {
     vk_check(
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
     vk_check(vkResetFences(m_device, 1, &m_fence_render));
@@ -300,8 +349,6 @@ void VulkanEngine::draw() {
     vk_check(vkAcquireNextImageKHR(m_device, m_swapchain, one_second_ns,
                                    m_semph_present, nullptr, &swap_img_idx));
 
-    // now that we are sure that the commands finished executing, we can safely
-    // reset the command buffer to begin recording again.
     vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
 
     VkCommandBufferBeginInfo cmd_begin_info{
@@ -325,8 +372,13 @@ void VulkanEngine::draw() {
                          VK_SUBPASS_CONTENTS_INLINE);
 
     // Draw
-    vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipe);
-    vkCmdDraw(m_cmd_buf, 3, 1, 0, 0);
+    vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+
+    VkDeviceSize offset = 0;
+    vkCmdBindVertexBuffers(m_cmd_buf, 0, 1, &m_mesh.vertex_buffer.buffer,
+                           &offset);
+
+    vkCmdDraw(m_cmd_buf, m_mesh.vertices.size(), 1, 0, 0);
 
     // finalize the render pass and the command buffer
     vkCmdEndRenderPass(m_cmd_buf);
@@ -360,8 +412,8 @@ void VulkanEngine::draw() {
     m_frame_count++;
 }
 
-bool VulkanEngine::load_shader(const uint32_t buffer[], size_t size,
-                               VkShaderModule *out) {
+bool Engine::load_shader(const uint32_t buffer[], size_t size,
+                         VkShaderModule *out) {
     VkShaderModuleCreateInfo createInfo{
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = size,

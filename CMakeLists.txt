@@ -8,11 +8,12 @@ project(learning-vulkan)
 # Sources
 list(APPEND sources
         src/main.cpp
-        src/engine/vk_engine.cpp
+        src/engine/engine.cpp
 )
 
 # Shaders
 list(APPEND shaders
+        src/shaders/mesh.vert
         src/shaders/triangle.vert
         src/shaders/triangle.frag
 )
@@ -32,6 +33,9 @@ list(APPEND libs vk-bootstrap)
 
 add_subdirectory(vendor/VulkanMemoryAllocator)
 list(APPEND libs VulkanMemoryAllocator)
+
+add_subdirectory(vendor/glm)
+list(APPEND libs glm::glm)
 
 # Compile shaders
 set(shader_dir ${CMAKE_CURRENT_BINARY_DIR}/shaders)

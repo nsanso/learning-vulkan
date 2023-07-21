@@ -3,10 +3,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 #include <VkBootstrap.h>
+#include <vk_mem_alloc.h>
 
-#include <cstdio>
+#include "utils.h"
 
-class VulkanEngine {
+class Engine {
    public:
     const uint32_t vk_version = VK_API_VERSION_1_3;
 
@@ -49,8 +50,12 @@ class VulkanEngine {
     VkShaderModule m_vertex_shader;
     VkShaderModule m_fragment_shader;
 
-    VkPipeline m_pipe;
+    VkPipeline m_pipeline;
     VkPipelineLayout m_pipelayout;
+
+    VmaAllocator m_allocator;
+
+    Mesh m_mesh;
 
     bool load_shader(const uint32_t buffer[], size_t size, VkShaderModule *out);
 };
