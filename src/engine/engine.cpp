@@ -1,7 +1,7 @@
 #include "engine.h"
 
+#include <src/shaders/mesh.frag.h>
 #include <src/shaders/mesh.vert.h>
-#include <src/shaders/triangle.frag.h>
 #include <vulkan/vulkan_core.h>
 
 #include "pipeline.h"
@@ -153,10 +153,14 @@ GraphicsEngine::GraphicsEngine() {
     // Create the pipeline
     GraphicsPipelineBuilder(m_device)
         .add_shader(VK_SHADER_STAGE_VERTEX_BIT, mesh_vert, sizeof(mesh_vert))
-        ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, triangle_frag,
-                     sizeof(triangle_frag))
+        ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, mesh_frag, sizeof(mesh_frag))
         ->set_extent(m_window_extent)
         ->set_render_pass(m_render_pass)
+        ->add_push_constant_range({
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0,
+            .size = sizeof(glm::mat4),
+        })
         ->build(&m_pipeline);
 
     // create allocator
@@ -171,9 +175,9 @@ GraphicsEngine::GraphicsEngine() {
     m_meshes.push_back(
         Mesh(m_allocator,
              std::vector<Vertex>{
-                 Vertex{.position{1.f, 1.f, 0.f}, .color{1.f, 0.f, 0.f}},
-                 Vertex{.position{-1.f, 1.f, 0.f}, .color{0.f, 1.f, 0.f}},
-                 Vertex{.position{0.f, -1.f, 0.f}, .color{0.f, 0.f, 1.f}},
+                 Vertex{.position{.5f, 0.f, 0.f}, .color{1.f, 0.f, 0.f}},
+                 Vertex{.position{-.5f, 0.f, 0.f}, .color{0.f, 1.f, 0.f}},
+                 Vertex{.position{0.f, 1.f, 0.f}, .color{0.f, 0.f, 1.f}},
              }));
 
     // done
@@ -234,12 +238,11 @@ void GraphicsEngine::draw() {
     vk_check(
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
     vk_check(vkResetFences(m_device, 1, &m_fence_render));
+    vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
 
     uint32_t swap_img_idx;
     vk_check(vkAcquireNextImageKHR(m_device, m_swapchain, one_second_ns,
                                    m_semph_present, nullptr, &swap_img_idx));
-
-    vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
 
     VkCommandBufferBeginInfo cmd_begin_info{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -247,7 +250,7 @@ void GraphicsEngine::draw() {
     };
     vk_check(vkBeginCommandBuffer(m_cmd_buf, &cmd_begin_info));
 
-    VkClearValue clear_value{.color{.float32{.0f, 0.f, 0.f, 1.f}}};
+    VkClearValue clear_value{.color{.float32{.0f, 0.f, 0.f, 0.f}}};
     VkRenderPassBeginInfo renderpass_begin_info{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = m_render_pass,
@@ -268,6 +271,22 @@ void GraphicsEngine::draw() {
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(m_cmd_buf, 0, 1,
                            &m_meshes.at(0).vertex_buffer.buffer, &offset);
+
+    glm::vec3 camera_position{0.f, 0.f, -2.f};
+    glm::mat4 view = glm::translate(glm::mat4(1.f), camera_position);
+    glm::mat4 proj =
+        glm::perspective(glm::radians(90.f), 16.f / 9.f, 0.1f, 200.f);
+    // proj[1][1] *= -1;  // TODO: This looks weird, investigate
+    glm::mat4 model =
+        glm::rotate(glm::mat4{1.f}, glm::radians(m_frame_count * 0.4f),
+                    glm::vec3{0.f, 1.f, 0.f});
+
+    glm::mat4 transform = proj * view * model;
+    transform = glm::mat4(1.f);  // DEBUG
+
+    vkCmdPushConstants(m_cmd_buf, m_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
+                       0, sizeof(glm::mat4), &transform);
+
     vkCmdDraw(m_cmd_buf, m_meshes.at(0).vertices.size(), 1, 0, 0);
 
     // finalize the render pass and the command buffer

@@ -18,8 +18,7 @@ list(APPEND sources
 # Shaders
 list(APPEND shaders
         src/shaders/mesh.vert
-        src/shaders/triangle.vert
-        src/shaders/triangle.frag
+        src/shaders/mesh.frag
 )
 
 # External dependencies

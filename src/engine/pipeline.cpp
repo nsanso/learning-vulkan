@@ -37,6 +37,12 @@ GraphicsPipelineBuilder* GraphicsPipelineBuilder::set_render_pass(
     return this;
 }
 
+GraphicsPipelineBuilder* GraphicsPipelineBuilder::add_push_constant_range(
+    VkPushConstantRange range) {
+    push_constant_ranges.push_back(range);
+    return this;
+}
+
 void GraphicsPipelineBuilder::build(GraphicsPipeline* destination) {
     destination->device = device;
 
@@ -48,14 +54,19 @@ void GraphicsPipelineBuilder::build(GraphicsPipeline* destination) {
     vertexinput_info.vertexAttributeDescriptionCount = attributes.size();
     vertexinput_info.pVertexAttributeDescriptions = attributes.data();
 
-    vk_check(vkCreatePipelineLayout(device, &pipelayout_triangle_info, nullptr,
+    layout_info.pushConstantRangeCount = push_constant_ranges.size();
+    layout_info.pPushConstantRanges = push_constant_ranges.data();
+
+    vk_check(vkCreatePipelineLayout(device, &layout_info, nullptr,
                                     &destination->layout));
-    pipe_info.stageCount = shader_stages.size();
-    pipe_info.pStages = shader_stages.data();
-    pipe_info.layout = destination->layout;
-    pipe_info.renderPass = render_pass;
-    vk_check(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipe_info,
-                                       nullptr, &destination->pipeline));
+
+    pipeline_info.stageCount = shader_stages.size();
+    pipeline_info.pStages = shader_stages.data();
+    pipeline_info.layout = destination->layout;
+    pipeline_info.renderPass = render_pass;
+    vk_check(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
+                                       &pipeline_info, nullptr,
+                                       &destination->pipeline));
 
     for (auto stage : shader_stages) {
         vkDestroyShaderModule(device, stage.module, nullptr);

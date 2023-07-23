@@ -24,15 +24,18 @@ class GraphicsPipelineBuilder {
                                         const uint32_t buffer[], size_t size);
     GraphicsPipelineBuilder* set_extent(VkExtent2D extent);
     GraphicsPipelineBuilder* set_render_pass(VkRenderPass render_pass);
+    GraphicsPipelineBuilder* add_push_constant_range(VkPushConstantRange range);
     void build(GraphicsPipeline* destination);
 
    private:
-    VkViewport viewport{.minDepth = 0.f, .maxDepth = 1.f};
-    VkRect2D scissor{};
-    VkRenderPass render_pass{};
+    VkRect2D scissor;
+    VkRenderPass render_pass;
     VkDevice device;
 
-    std::vector<VkPipelineShaderStageCreateInfo> shader_stages{};
+    std::vector<VkPipelineShaderStageCreateInfo> shader_stages;
+    std::vector<VkPushConstantRange> push_constant_ranges;
+
+    VkViewport viewport{.minDepth = 0.f, .maxDepth = 1.f};
 
     VkPipelineVertexInputStateCreateInfo vertexinput_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -70,10 +73,10 @@ class GraphicsPipelineBuilder {
         .attachmentCount = 1,
         .pAttachments = &colorblend_attachment,
     };
-    VkPipelineLayoutCreateInfo pipelayout_triangle_info{
+    VkPipelineLayoutCreateInfo layout_info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
     };
-    VkGraphicsPipelineCreateInfo pipe_info{
+    VkGraphicsPipelineCreateInfo pipeline_info{
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .pVertexInputState = &vertexinput_info,
         .pInputAssemblyState = &inputassembly_info,
