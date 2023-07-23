@@ -5,14 +5,17 @@
 #include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
 
+#include <vector>
+
+#include "pipeline.h"
 #include "utils.h"
 
-class Engine {
+class GraphicsEngine {
    public:
     const uint32_t vk_version = VK_API_VERSION_1_3;
 
-    void init();
-    void cleanup();
+    GraphicsEngine();
+    ~GraphicsEngine();
     void draw();
     void run();
 
@@ -47,15 +50,11 @@ class Engine {
     VkSemaphore m_semph_render;
     VkFence m_fence_render;
 
-    VkShaderModule m_vertex_shader;
-    VkShaderModule m_fragment_shader;
-
-    VkPipeline m_pipeline;
-    VkPipelineLayout m_pipelayout;
+    GraphicsPipeline m_pipeline;
 
     VmaAllocator m_allocator;
 
-    Mesh m_mesh;
+    std::vector<Mesh> m_meshes;
 
     bool load_shader(const uint32_t buffer[], size_t size, VkShaderModule *out);
 };

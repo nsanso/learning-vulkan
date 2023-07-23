@@ -1,14 +1,18 @@
 cmake_minimum_required(VERSION 3.20)
+
+project(learning-vulkan)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-project(learning-vulkan)
+set(CMAKE_BUILD_TYPE Debug)
 
 # Sources
 list(APPEND sources
         src/main.cpp
         src/engine/engine.cpp
+        src/engine/mesh.cpp
+        src/engine/pipeline.cpp
 )
 
 # Shaders

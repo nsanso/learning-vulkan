@@ -1,11 +1,7 @@
 #include "engine/engine.h"
 
 int main(int argc, char *argv[]) {
-    Engine engine;
-
-    engine.init();
+    GraphicsEngine engine;
     engine.run();
-    engine.cleanup();
-
     return 0;
 }

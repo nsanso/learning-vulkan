@@ -4,6 +4,7 @@
 #include <src/shaders/triangle.frag.h>
 #include <vulkan/vulkan_core.h>
 
+#include "pipeline.h"
 #include "utils.h"
 
 #define VMA_IMPLEMENTATION
@@ -19,7 +20,7 @@ const T &vkb_value_or_abort(vkb::Result<T> res);
 void vk_check(VkResult err);
 
 // public
-void Engine::init() {
+GraphicsEngine::GraphicsEngine() {
     // Get window
     SDL_InitSubSystem(SDL_INIT_VIDEO);
     m_window = SDL_CreateWindow("Learning Vulkan", SDL_WINDOWPOS_UNDEFINED,
@@ -149,106 +150,14 @@ void Engine::init() {
     vk_check(
         vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
 
-    // Load shaders
-    load_shader(mesh_vert, sizeof(mesh_vert), &m_vertex_shader);
-    load_shader(triangle_frag, sizeof(triangle_frag), &m_fragment_shader);
-
-    VkPipelineShaderStageCreateInfo shader_stages[]{
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = m_vertex_shader,
-            .pName = "main",
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = m_fragment_shader,
-            .pName = "main",
-        },
-    };
-    uint32_t shader_stages_count =
-        sizeof(shader_stages) / sizeof(shader_stages[0]);
-
     // Create the pipeline
-    VkViewport viewport{
-        .width = (float)m_window_extent.width,
-        .height = (float)m_window_extent.height,
-        .minDepth = 0.f,
-        .maxDepth = 1.f,
-    };
-    VkRect2D scissor{.extent = m_window_extent};
-
-    VkPipelineVertexInputStateCreateInfo vertexinput_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-        .vertexBindingDescriptionCount =
-            sizeof(VertexInputDescription.bindings),
-        .pVertexBindingDescriptions = VertexInputDescription.bindings,
-        .vertexAttributeDescriptionCount =
-            sizeof(VertexInputDescription.attributes),
-        .pVertexAttributeDescriptions = VertexInputDescription.attributes,
-    };
-
-    VkPipelineInputAssemblyStateCreateInfo inputassembly_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-    };
-
-    VkPipelineRasterizationStateCreateInfo rasterization_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-        .polygonMode = VK_POLYGON_MODE_FILL,
-        .frontFace = VK_FRONT_FACE_CLOCKWISE,
-        .lineWidth = 1.0f,
-    };
-
-    VkPipelineMultisampleStateCreateInfo multisample_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-        .minSampleShading = 1.0f,
-    };
-
-    VkPipelineColorBlendAttachmentState colorblend_attachment{
-        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                          VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-    };
-
-    VkPipelineViewportStateCreateInfo viewport_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-        .viewportCount = 1,
-        .pViewports = &viewport,
-        .scissorCount = 1,
-        .pScissors = &scissor,
-    };
-
-    VkPipelineColorBlendStateCreateInfo colorblend_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-        .logicOp =
-            VK_LOGIC_OP_COPY,  // probably not used as .logicOpEnable is falsy
-        .attachmentCount = 1,
-        .pAttachments = &colorblend_attachment,
-    };
-
-    VkPipelineLayoutCreateInfo pipelayout_triangle_info{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    };
-    vk_check(vkCreatePipelineLayout(m_device, &pipelayout_triangle_info,
-                                    nullptr, &m_pipelayout));
-
-    VkGraphicsPipelineCreateInfo pipe_info{
-        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-        .stageCount = shader_stages_count,  // todo
-        .pStages = shader_stages,           // todo
-        .pVertexInputState = &vertexinput_info,
-        .pInputAssemblyState = &inputassembly_info,
-        .pViewportState = &viewport_info,
-        .pRasterizationState = &rasterization_info,
-        .pMultisampleState = &multisample_info,
-        .pColorBlendState = &colorblend_info,
-        .layout = m_pipelayout,
-        .renderPass = m_render_pass,
-    };
-    vk_check(vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipe_info,
-                                       nullptr, &m_pipeline));
+    GraphicsPipelineBuilder(m_device)
+        .add_shader(VK_SHADER_STAGE_VERTEX_BIT, mesh_vert, sizeof(mesh_vert))
+        ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, triangle_frag,
+                     sizeof(triangle_frag))
+        ->set_extent(m_window_extent)
+        ->set_render_pass(m_render_pass)
+        ->build(&m_pipeline);
 
     // create allocator
     VmaAllocatorCreateInfo allocator_info{
@@ -259,37 +168,20 @@ void Engine::init() {
     vmaCreateAllocator(&allocator_info, &m_allocator);
 
     // load mesh
-    m_mesh.vertices = {
-        Vertex{.position{0.f, -1.f, 0.f}, .color{1.f, 0.f, 0.f}},
-        Vertex{.position{1.f, 0.f, 0.f}, .color{0.f, 1.f, 0.f}},
-        Vertex{.position{0.f, 1.f, 0.f}, .color{0.f, 0.f, 1.f}},
-        Vertex{.position{-1.f, 0.f, 0.f}, .color{0.f, 0.f, 0.f}},
-    };
-
-    VkBufferCreateInfo buffer_info{
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = m_mesh.vertices.size() * sizeof(Vertex),
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT};
-
-    VmaAllocationCreateInfo allocation_info{
-        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT,
-        .usage = VMA_MEMORY_USAGE_AUTO,
-    };
-    vk_check(vmaCreateBuffer(m_allocator, &buffer_info, &allocation_info,
-                             &m_mesh.vertex_buffer.buffer,
-                             &m_mesh.vertex_buffer.allocation, nullptr));
-    void *data;
-    vmaMapMemory(m_allocator, m_mesh.vertex_buffer.allocation, &data);
-    memcpy(data, m_mesh.vertices.data(),
-           m_mesh.vertices.size() * sizeof(Vertex));
-    vmaUnmapMemory(m_allocator, m_mesh.vertex_buffer.allocation);
+    m_meshes.push_back(
+        Mesh(m_allocator,
+             std::vector<Vertex>{
+                 Vertex{.position{1.f, 1.f, 0.f}, .color{1.f, 0.f, 0.f}},
+                 Vertex{.position{-1.f, 1.f, 0.f}, .color{0.f, 1.f, 0.f}},
+                 Vertex{.position{0.f, -1.f, 0.f}, .color{0.f, 0.f, 1.f}},
+             }));
 
     // done
     m_initialized = true;
     printf("VulkanEngine::init OK\n");
 }
 
-void Engine::cleanup() {
+GraphicsEngine::~GraphicsEngine() {
     if (!m_initialized) {
         printf("VulkanEngine::cleanup: not initialized\n");
         return;
@@ -299,13 +191,11 @@ void Engine::cleanup() {
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
 
     // Destroy in the inverse order of creation
-    vmaDestroyBuffer(m_allocator, m_mesh.vertex_buffer.buffer,
-                     m_mesh.vertex_buffer.allocation);
+    for (auto m : m_meshes) {
+        m.destroy();
+    };
     vmaDestroyAllocator(m_allocator);
-    vkDestroyPipeline(m_device, m_pipeline, nullptr);
-    vkDestroyPipelineLayout(m_device, m_pipelayout, nullptr);
-    vkDestroyShaderModule(m_device, m_vertex_shader, nullptr);
-    vkDestroyShaderModule(m_device, m_fragment_shader, nullptr);
+    m_pipeline.destroy();
     vkDestroySemaphore(m_device, m_semph_render, nullptr);
     vkDestroySemaphore(m_device, m_semph_present, nullptr);
     vkDestroyFence(m_device, m_fence_render, nullptr);
@@ -324,7 +214,7 @@ void Engine::cleanup() {
     printf("VulkanEngine::cleanup OK\n");
 }
 
-void Engine::run() {
+void GraphicsEngine::run() {
     SDL_Event event;
 
     while (true) {
@@ -340,7 +230,7 @@ run_QUIT:
     return;
 }
 
-void Engine::draw() {
+void GraphicsEngine::draw() {
     vk_check(
         vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
     vk_check(vkResetFences(m_device, 1, &m_fence_render));
@@ -372,13 +262,13 @@ void Engine::draw() {
                          VK_SUBPASS_CONTENTS_INLINE);
 
     // Draw
-    vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
+    vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      m_pipeline.pipeline);
 
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(m_cmd_buf, 0, 1, &m_mesh.vertex_buffer.buffer,
-                           &offset);
-
-    vkCmdDraw(m_cmd_buf, m_mesh.vertices.size(), 1, 0, 0);
+    vkCmdBindVertexBuffers(m_cmd_buf, 0, 1,
+                           &m_meshes.at(0).vertex_buffer.buffer, &offset);
+    vkCmdDraw(m_cmd_buf, m_meshes.at(0).vertices.size(), 1, 0, 0);
 
     // finalize the render pass and the command buffer
     vkCmdEndRenderPass(m_cmd_buf);
@@ -410,25 +300,6 @@ void Engine::draw() {
     vk_check(vkQueuePresentKHR(m_q_graphics, &present_info));
 
     m_frame_count++;
-}
-
-bool Engine::load_shader(const uint32_t buffer[], size_t size,
-                         VkShaderModule *out) {
-    VkShaderModuleCreateInfo createInfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = size,
-        .pCode = buffer,
-    };
-
-    vk_check(vkCreateShaderModule(m_device, &createInfo, nullptr, out));
-    return true;
-}
-
-void vk_check(VkResult err) {
-    if (err) {
-        printf("Detected Vulkan error: %d\n", err);
-        abort();
-    }
 }
 
 template <typename T>
