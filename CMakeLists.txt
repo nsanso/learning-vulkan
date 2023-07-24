@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(learning-vulkan)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_BUILD_TYPE Debug)
@@ -25,11 +25,18 @@ list(APPEND shaders
 find_package(Threads REQUIRED)
 list(APPEND libs ${CMAKE_THREAD_LIBS_INIT})
 
+if (WIN32)
+list(APPEND includes $ENV{VULKAN_SDK}/Include)
+list(APPEND CMAKE_PREFIX_PATH $ENV{VULKAN_SDK}/Lib)
+find_library(SDL2 NAMES SDL2 REQUIRED)
+list(APPEND libs ${SDL2})
+else()
 find_package(SDL2 REQUIRED)
 list(APPEND libs SDL2)
+endif()
 
 find_package(Vulkan REQUIRED)
-list(APPEND libs vulkan)
+list(APPEND libs ${Vulkan_LIBRARY})
 
 add_subdirectory(vendor/vk-bootstrap)
 list(APPEND libs vk-bootstrap)
@@ -42,6 +49,7 @@ list(APPEND libs glm::glm)
 
 # Compile shaders
 set(shader_dir ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+list(APPEND includes ${shader_dir})
 find_program(glsl glslangValidator)
 foreach(s ${shaders})
         set(in ${CMAKE_CURRENT_SOURCE_DIR}/${s})
@@ -59,7 +67,11 @@ add_custom_target(shader_target DEPENDS ${shader_headers})
 
 # Executable target
 set(target learning-vulkan)
+if (WIN32)
+add_executable(${target} WIN32 ${sources})
+else()
 add_executable(${target} ${sources})
+endif()
 target_link_libraries(${target} ${libs})
 add_dependencies(${target} shader_target)
-target_include_directories(${target} PRIVATE ${shader_dir}) 
+target_include_directories(${target} PRIVATE ${includes}) 
