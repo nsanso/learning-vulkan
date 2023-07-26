@@ -4,65 +4,201 @@
 #include <src/shaders/mesh.vert.h>
 #include <vulkan/vulkan_core.h>
 
+#include <algorithm>
+#include <cstdio>
+
 #include "pipeline.h"
 #include "utils.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-#include <cstdio>
-
 const int64_t one_second_ns = 1'000'000'000;
-
-// Forward declarations
-template <typename T>
-const T &vkb_value_or_abort(vkb::Result<T> res);
-void vk_check(VkResult err);
 
 // public
 GraphicsEngine::GraphicsEngine() {
+    // NOTE: vk-bootstrap is giving me problems on windows.
+    //       Using raw vulkan fixes all issues, even though it is more complex.
+
     // Get window
     SDL_InitSubSystem(SDL_INIT_VIDEO);
     m_window = SDL_CreateWindow("Learning Vulkan", SDL_WINDOWPOS_UNDEFINED,
                                 SDL_WINDOWPOS_UNDEFINED, m_window_extent.width,
                                 m_window_extent.height, SDL_WINDOW_VULKAN);
 
-    // Get Vulkan instance
-    m_instance = vkb_value_or_abort(vkb::InstanceBuilder{}
-                                        .set_app_name("Learning Vulkan")
-                                        .request_validation_layers()
-                                        .require_api_version(vk_version)
-                                        .use_default_debug_messenger()
-                                        .build());
+    VkApplicationInfo application_info{
+        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+        .pApplicationName = "Learning Vulkan",
+        .applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
+        .pEngineName = "Custom",
+        .engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
+        .apiVersion = vk_version,
+    };
+
+    // TODO: add custom logger
+    std::vector<const char *> instance_extensions{
+        // #ifndef NDEBUG
+        //        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+        // #endif
+    };
+
+    uint32_t sdl_extension_count;
+    SDL_Vulkan_GetInstanceExtensions(m_window, &sdl_extension_count, nullptr);
+
+    size_t extension_count = instance_extensions.size();
+    instance_extensions.resize(extension_count + sdl_extension_count);
+    SDL_Vulkan_GetInstanceExtensions(m_window, &sdl_extension_count,
+                                     &instance_extensions[extension_count]);
+
+    const std::vector<const char *> validation_layers{
+#ifndef NDEBUG
+        "VK_LAYER_KHRONOS_validation",
+#endif
+    };
+
+    VkInstanceCreateInfo instance_info{
+        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        .pApplicationInfo = &application_info,
+        .enabledLayerCount = (uint32_t)validation_layers.size(),
+        .ppEnabledLayerNames = validation_layers.data(),
+        .enabledExtensionCount = (uint32_t)instance_extensions.size(),
+        .ppEnabledExtensionNames = instance_extensions.data(),
+    };
+
+    vk_check(vkCreateInstance(&instance_info, nullptr, &m_instance));
 
     // Get surface
     SDL_Vulkan_CreateSurface(m_window, m_instance, &m_surface);
 
     // Get device
-    m_gpu = vkb_value_or_abort(
-        vkb::PhysicalDeviceSelector{m_instance}
-            .set_minimum_version(VK_API_VERSION_MAJOR(vk_version),
-                                 VK_API_VERSION_MINOR(vk_version))
-            .set_surface(m_surface)
-            .select());
+    uint32_t device_count = 0;
+    vkEnumeratePhysicalDevices(m_instance, &device_count, nullptr);
 
-    m_device = vkb_value_or_abort(vkb::DeviceBuilder{m_gpu}.build());
+    std::vector<VkPhysicalDevice> devices(device_count);
+    vkEnumeratePhysicalDevices(m_instance, &device_count, devices.data());
 
-    // Get Queues
-    m_q_graphics =
-        vkb_value_or_abort(m_device.get_queue(vkb::QueueType::graphics));
-    m_qfamily_graphics =
-        vkb_value_or_abort(m_device.get_queue_index(vkb::QueueType::graphics));
+    for (auto device : devices) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(device, &properties);
+
+        VkPhysicalDeviceFeatures features;
+        vkGetPhysicalDeviceFeatures(device, &features);
+
+        uint32_t qfam_count = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &qfam_count, nullptr);
+
+        std::vector<VkQueueFamilyProperties> qfamilies(qfam_count);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &qfam_count,
+                                                 qfamilies.data());
+
+        // TODO: add checks that select a suitable gpu instead of just taking
+        // the first one
+        if (true) {
+            m_gpu = device;
+
+            for (int i = qfam_count - 1; i >= 0; i--) {
+                // loop in reverse order to make sure that you take the suitable
+                // queue with the lowest index possible
+                if (qfamilies.at(i).queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                    m_qfamily_graphics = i;
+                }
+            }
+            break;
+        }
+    }
+
+    // Get logical device
+    float queue_info_priority = .99f;
+    VkDeviceQueueCreateInfo queue_info{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        .queueFamilyIndex = m_qfamily_graphics,
+        .queueCount = 1,
+        .pQueuePriorities = &queue_info_priority,
+    };
+    VkPhysicalDeviceFeatures features{};
+    std::vector<const char *> device_extensions{
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+        VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+    };
+    VkDeviceCreateInfo device_info{
+        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &queue_info,
+        .enabledExtensionCount = (uint32_t)device_extensions.size(),
+        .ppEnabledExtensionNames = device_extensions.data(),
+        .pEnabledFeatures = &features,
+    };
+    vk_check(vkCreateDevice(m_gpu, &device_info, nullptr, &m_device));
+
+    // Get queues
+    vkGetDeviceQueue(m_device, m_qfamily_graphics, 0, &m_q_graphics);
 
     // Get swapchain
-    m_swapchain = vkb_value_or_abort(
-        vkb::SwapchainBuilder{m_gpu, m_device, m_surface}
-            .use_default_format_selection()
-            .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-            .set_desired_extent(m_window_extent.width, m_window_extent.height)
-            .build());
-    m_swapchain_images = vkb_value_or_abort(m_swapchain.get_images());
-    m_swapchain_views = vkb_value_or_abort(m_swapchain.get_image_views());
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpu, m_surface,
+                                                       &surface_capabilities));
+
+    uint32_t surface_format_count;
+    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
+        m_gpu, m_surface, &surface_format_count, nullptr));
+    std::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
+    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
+        m_gpu, m_surface, &surface_format_count, surface_formats.data()));
+    m_surface_format = surface_formats.at(0);
+
+    uint32_t present_mode_count;
+    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_gpu, m_surface, &present_mode_count, nullptr));
+    std::vector<VkPresentModeKHR> present_modes(present_mode_count);
+    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
+        m_gpu, m_surface, &present_mode_count, present_modes.data()));
+
+    VkSwapchainCreateInfoKHR swapchain_info{
+        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+        .surface = m_surface,
+        .minImageCount = std::clamp(surface_capabilities.minImageCount,
+                                    surface_capabilities.minImageCount + 1,
+                                    surface_capabilities.maxImageCount),
+        .imageFormat = m_surface_format.format,
+        .imageColorSpace = m_surface_format.colorSpace,
+        .imageExtent = m_window_extent,
+        .imageArrayLayers = 1,
+        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .preTransform = surface_capabilities.currentTransform,
+        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+        .presentMode = VK_PRESENT_MODE_FIFO_KHR,
+        .clipped = VK_TRUE,
+    };
+    vk_check(
+        vkCreateSwapchainKHR(m_device, &swapchain_info, nullptr, &m_swapchain));
+
+    // Get swapchain images
+    uint32_t swapchain_image_count;
+    vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchain_image_count,
+                            nullptr);
+    m_swapchain_images.resize(swapchain_image_count);
+    vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchain_image_count,
+                            m_swapchain_images.data());
+
+    // Get swapchain image views
+    m_swapchain_views.resize(m_swapchain_images.size());
+    for (size_t i = 0; i < m_swapchain_images.size(); i++) {
+        VkImageViewCreateInfo view_info{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+            .image = m_swapchain_images.at(i),
+            .viewType = VK_IMAGE_VIEW_TYPE_2D,
+            .format = m_surface_format.format,
+            .subresourceRange{
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+        };
+        vk_check(vkCreateImageView(m_device, &view_info, nullptr, &m_swapchain_views[i]));
+    }
 
     // Get Command pool
     VkCommandPoolCreateInfo command_pool_info{
@@ -85,7 +221,7 @@ GraphicsEngine::GraphicsEngine() {
 
     // Get Render pass
     VkAttachmentDescription color_attachment{
-        .format = m_swapchain.image_format,
+        .format = m_surface_format.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -204,15 +340,15 @@ GraphicsEngine::~GraphicsEngine() {
     vkDestroySemaphore(m_device, m_semph_present, nullptr);
     vkDestroyFence(m_device, m_fence_render, nullptr);
     vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
-    vkb::destroy_swapchain(m_swapchain);
+    vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
     vkDestroyRenderPass(m_device, m_render_pass, nullptr);
     for (size_t i = 0; i < m_frame_bufs.size(); i++) {
         vkDestroyFramebuffer(m_device, m_frame_bufs[i], nullptr);
         vkDestroyImageView(m_device, m_swapchain_views[i], nullptr);
     }
-    vkb::destroy_device(m_device);
-    vkb::destroy_surface(m_instance, m_surface);
-    vkb::destroy_instance(m_instance);
+    vkDestroyDevice(m_device, nullptr);
+    vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+    vkDestroyInstance(m_instance, nullptr);
     SDL_DestroyWindow(m_window);
 
     printf("VulkanEngine::cleanup OK\n");
@@ -313,20 +449,10 @@ void GraphicsEngine::draw() {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &m_semph_render,
         .swapchainCount = 1,
-        .pSwapchains = &m_swapchain.swapchain,
+        .pSwapchains = &m_swapchain,
         .pImageIndices = &swap_img_idx,
     };
     vk_check(vkQueuePresentKHR(m_q_graphics, &present_info));
 
     m_frame_count++;
-}
-
-template <typename T>
-const T &vkb_value_or_abort(vkb::Result<T> res) {
-    if (!res.has_value()) {
-        printf("Detected VKB error: %s\n",
-               res.full_error().type.message().c_str());
-        abort();
-    }
-    return res.value();
 }

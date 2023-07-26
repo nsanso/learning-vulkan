@@ -38,9 +38,6 @@ endif()
 find_package(Vulkan REQUIRED)
 list(APPEND libs ${Vulkan_LIBRARY})
 
-add_subdirectory(vendor/vk-bootstrap)
-list(APPEND libs vk-bootstrap)
-
 add_subdirectory(vendor/VulkanMemoryAllocator)
 list(APPEND libs VulkanMemoryAllocator)
 

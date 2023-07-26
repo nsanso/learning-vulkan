@@ -10,6 +10,12 @@ int main(int argc, char *argv[]) {
 #include <windows.h>
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
                    _In_ LPSTR lpCmdLine, _In_ int nShowCmd) {
+#ifndef NDEBUG
+    AllocConsole();
+    freopen_s((FILE**)stdout, "CONOUT$", "w", stdout);
+    freopen_s((FILE**)stderr, "CONOUT$", "w", stderr);
+    printf("Console attached!\n");
+#endif
     return main(__argc, __argv);
 }
 #endif

@@ -2,7 +2,6 @@
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
-#include <VkBootstrap.h>
 #include <vk_mem_alloc.h>
 
 #include <vector>
@@ -27,18 +26,19 @@ class GraphicsEngine {
     VkExtent2D m_window_extent{1280, 720};
     struct SDL_Window *m_window{nullptr};
 
-    vkb::Instance m_instance;
+    VkInstance m_instance;
     VkSurfaceKHR m_surface;
 
-    vkb::PhysicalDevice m_gpu;
-    vkb::Device m_device;
+    VkPhysicalDevice m_gpu;
+    VkDevice m_device;
 
-    vkb::Swapchain m_swapchain;
+    VkSwapchainKHR m_swapchain;
+    VkSurfaceFormatKHR m_surface_format;
     std::vector<VkImage> m_swapchain_images;
     std::vector<VkImageView> m_swapchain_views;
 
+    uint32_t m_qfamily_graphics{uint32_t(~0)};
     VkQueue m_q_graphics;
-    uint32_t m_qfamily_graphics;
 
     VkCommandPool m_cmd_pool;
     VkCommandBuffer m_cmd_buf;
@@ -55,6 +55,4 @@ class GraphicsEngine {
     VmaAllocator m_allocator;
 
     std::vector<Mesh> m_meshes;
-
-    bool load_shader(const uint32_t buffer[], size_t size, VkShaderModule *out);
 };
