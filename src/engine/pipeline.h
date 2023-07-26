@@ -28,12 +28,12 @@ class GraphicsPipelineBuilder {
     void build(GraphicsPipeline* destination);
 
    private:
-    VkRect2D scissor;
-    VkRenderPass render_pass;
-    VkDevice device;
+    VkRect2D scissor{};
+    VkRenderPass render_pass{};
+    VkDevice device{};
 
-    std::vector<VkPipelineShaderStageCreateInfo> shader_stages;
-    std::vector<VkPushConstantRange> push_constant_ranges;
+    std::vector<VkPipelineShaderStageCreateInfo> shader_stages{};
+    std::vector<VkPushConstantRange> push_constant_ranges{};
 
     VkViewport viewport{.minDepth = 0.f, .maxDepth = 1.f};
 

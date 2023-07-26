@@ -412,13 +412,10 @@ void GraphicsEngine::draw() {
     glm::mat4 view = glm::translate(glm::mat4(1.f), camera_position);
     glm::mat4 proj =
         glm::perspective(glm::radians(90.f), 16.f / 9.f, 0.1f, 200.f);
-    // proj[1][1] *= -1;  // TODO: This looks weird, investigate
     glm::mat4 model =
         glm::rotate(glm::mat4{1.f}, glm::radians(m_frame_count * 0.4f),
                     glm::vec3{0.f, 1.f, 0.f});
-
     glm::mat4 transform = proj * view * model;
-    transform = glm::mat4(1.f);  // DEBUG
 
     vkCmdPushConstants(m_cmd_buf, m_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
                        0, sizeof(glm::mat4), &transform);
