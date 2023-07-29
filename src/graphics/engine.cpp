@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "device.h"
 #include "pipeline.h"
 #include "utils.h"
 
@@ -26,139 +27,61 @@ GraphicsEngine::GraphicsEngine() {
                                 SDL_WINDOWPOS_UNDEFINED, m_window_extent.width,
                                 m_window_extent.height, SDL_WINDOW_VULKAN);
 
-    VkApplicationInfo application_info{
-        .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "Learning Vulkan",
-        .applicationVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
-        .pEngineName = "Custom",
-        .engineVersion = VK_MAKE_API_VERSION(0, 0, 1, 0),
-        .apiVersion = vk_version,
-    };
-
-    // TODO: add custom logger
-    std::vector<const char *> instance_extensions{
-        // #ifndef NDEBUG
-        //        VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-        // #endif
-    };
-
     uint32_t sdl_extension_count;
     SDL_Vulkan_GetInstanceExtensions(m_window, &sdl_extension_count, nullptr);
 
-    size_t extension_count = instance_extensions.size();
-    instance_extensions.resize(extension_count + sdl_extension_count);
+    std::vector<const char *> sdl_extensions(sdl_extension_count);
     SDL_Vulkan_GetInstanceExtensions(m_window, &sdl_extension_count,
-                                     &instance_extensions[extension_count]);
+                                     sdl_extensions.data());
 
-    const std::vector<const char *> validation_layers{
-#ifndef NDEBUG
-        "VK_LAYER_KHRONOS_validation",
-#endif
-    };
+    GraphicsApplicationBuilder application_builder =
+        GraphicsApplicationBuilder();
 
-    VkInstanceCreateInfo instance_info{
-        .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        .pApplicationInfo = &application_info,
-        .enabledLayerCount = (uint32_t)validation_layers.size(),
-        .ppEnabledLayerNames = validation_layers.data(),
-        .enabledExtensionCount = (uint32_t)instance_extensions.size(),
-        .ppEnabledExtensionNames = instance_extensions.data(),
-    };
+    application_builder.set_application_name("Learning Vulkan")
+        ->set_application_version(0, 1, 0);
 
-    vk_check(vkCreateInstance(&instance_info, nullptr, &m_instance));
-
-    // Get surface
-    SDL_Vulkan_CreateSurface(m_window, m_instance, &m_surface);
-
-    // Get device
-    uint32_t device_count = 0;
-    vkEnumeratePhysicalDevices(m_instance, &device_count, nullptr);
-
-    std::vector<VkPhysicalDevice> devices(device_count);
-    vkEnumeratePhysicalDevices(m_instance, &device_count, devices.data());
-
-    for (auto device : devices) {
-        VkPhysicalDeviceProperties properties;
-        vkGetPhysicalDeviceProperties(device, &properties);
-
-        VkPhysicalDeviceFeatures features;
-        vkGetPhysicalDeviceFeatures(device, &features);
-
-        uint32_t qfam_count = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &qfam_count, nullptr);
-
-        std::vector<VkQueueFamilyProperties> qfamilies(qfam_count);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &qfam_count,
-                                                 qfamilies.data());
-
-        // TODO: add checks that select a suitable gpu instead of just taking
-        // the first one
-        if (true) {
-            m_gpu = device;
-
-            for (int i = qfam_count - 1; i >= 0; i--) {
-                // loop in reverse order to make sure that you take the suitable
-                // queue with the lowest index possible
-                if (qfamilies.at(i).queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                    m_qfamily_graphics = i;
-                }
-            }
-            break;
-        }
+    for (size_t i = 0; i < sdl_extension_count; i++) {
+        application_builder.add_instance_extension(sdl_extensions.at(i));
     }
 
-    // Get logical device
-    float queue_info_priority = .99f;
-    VkDeviceQueueCreateInfo queue_info{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .queueFamilyIndex = m_qfamily_graphics,
-        .queueCount = 1,
-        .pQueuePriorities = &queue_info_priority,
-    };
-    VkPhysicalDeviceFeatures features{};
-    std::vector<const char *> device_extensions{
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
-    };
-    VkDeviceCreateInfo device_info{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queue_info,
-        .enabledExtensionCount = (uint32_t)device_extensions.size(),
-        .ppEnabledExtensionNames = device_extensions.data(),
-        .pEnabledFeatures = &features,
-    };
-    vk_check(vkCreateDevice(m_gpu, &device_info, nullptr, &m_device));
+    m_application = application_builder.build();
 
-    // Get queues
-    vkGetDeviceQueue(m_device, m_qfamily_graphics, 0, &m_q_graphics);
+    SDL_Vulkan_CreateSurface(m_window, m_application.instance, &m_surface);
+
+    m_qfamily_graphics = m_application.get_queue_family(VK_QUEUE_GRAPHICS_BIT);
+
+    m_device = GraphicsDeviceBuilder(m_application.device)
+                   .add_queue(m_qfamily_graphics, .99f)
+                   ->build();
+
+    m_q_graphics = m_device.get_queue(m_qfamily_graphics);
 
     // Get swapchain
     VkSurfaceCapabilitiesKHR surface_capabilities;
-    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_gpu, m_surface,
-                                                       &surface_capabilities));
+    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+        m_application.device, m_surface, &surface_capabilities));
 
     uint32_t surface_format_count;
     vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_gpu, m_surface, &surface_format_count, nullptr));
+        m_application.device, m_surface, &surface_format_count, nullptr));
     std::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
     vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_gpu, m_surface, &surface_format_count, surface_formats.data()));
+        m_application.device, m_surface, &surface_format_count,
+        surface_formats.data()));
     m_surface_format = surface_formats.at(0);
 
     uint32_t present_mode_count;
     vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_gpu, m_surface, &present_mode_count, nullptr));
+        m_application.device, m_surface, &present_mode_count, nullptr));
     std::vector<VkPresentModeKHR> present_modes(present_mode_count);
     vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_gpu, m_surface, &present_mode_count, present_modes.data()));
+        m_application.device, m_surface, &present_mode_count,
+        present_modes.data()));
 
     VkSwapchainCreateInfoKHR swapchain_info{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .surface = m_surface,
-        .minImageCount = std::clamp(surface_capabilities.minImageCount,
-                                    surface_capabilities.minImageCount + 1,
-                                    surface_capabilities.maxImageCount),
+        .minImageCount = surface_capabilities.minImageCount + 1,
         .imageFormat = m_surface_format.format,
         .imageColorSpace = m_surface_format.colorSpace,
         .imageExtent = m_window_extent,
@@ -170,16 +93,16 @@ GraphicsEngine::GraphicsEngine() {
         .presentMode = VK_PRESENT_MODE_FIFO_KHR,
         .clipped = VK_TRUE,
     };
-    vk_check(
-        vkCreateSwapchainKHR(m_device, &swapchain_info, nullptr, &m_swapchain));
+    vk_check(vkCreateSwapchainKHR(m_device.device, &swapchain_info, nullptr,
+                                  &m_swapchain));
 
     // Get swapchain images
     uint32_t swapchain_image_count;
-    vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchain_image_count,
-                            nullptr);
+    vkGetSwapchainImagesKHR(m_device.device, m_swapchain,
+                            &swapchain_image_count, nullptr);
     m_swapchain_images.resize(swapchain_image_count);
-    vkGetSwapchainImagesKHR(m_device, m_swapchain, &swapchain_image_count,
-                            m_swapchain_images.data());
+    vkGetSwapchainImagesKHR(m_device.device, m_swapchain,
+                            &swapchain_image_count, m_swapchain_images.data());
 
     // Get swapchain image views
     m_swapchain_views.resize(m_swapchain_images.size());
@@ -197,7 +120,8 @@ GraphicsEngine::GraphicsEngine() {
                 .layerCount = 1,
             },
         };
-        vk_check(vkCreateImageView(m_device, &view_info, nullptr, &m_swapchain_views[i]));
+        vk_check(vkCreateImageView(m_device.device, &view_info, nullptr,
+                                   &m_swapchain_views[i]));
     }
 
     // Get Command pool
@@ -206,7 +130,7 @@ GraphicsEngine::GraphicsEngine() {
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
         .queueFamilyIndex = m_qfamily_graphics,
     };
-    vk_check(vkCreateCommandPool(m_device, &command_pool_info, nullptr,
+    vk_check(vkCreateCommandPool(m_device.device, &command_pool_info, nullptr,
                                  &m_cmd_pool));
 
     // Get Command buffer
@@ -216,8 +140,8 @@ GraphicsEngine::GraphicsEngine() {
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    vk_check(
-        vkAllocateCommandBuffers(m_device, &cmdbuf_alloc_info, &m_cmd_buf));
+    vk_check(vkAllocateCommandBuffers(m_device.device, &cmdbuf_alloc_info,
+                                      &m_cmd_buf));
 
     // Get Render pass
     VkAttachmentDescription color_attachment{
@@ -249,7 +173,7 @@ GraphicsEngine::GraphicsEngine() {
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
-    vk_check(vkCreateRenderPass(m_device, &render_pass_info, nullptr,
+    vk_check(vkCreateRenderPass(m_device.device, &render_pass_info, nullptr,
                                 &m_render_pass));
 
     // Get Frame buffer
@@ -267,8 +191,8 @@ GraphicsEngine::GraphicsEngine() {
 
     for (size_t i = 0; i < m_swapchain_images.size(); i++) {
         fb_info.pAttachments = &m_swapchain_views[i];
-        vk_check(
-            vkCreateFramebuffer(m_device, &fb_info, nullptr, &m_frame_bufs[i]));
+        vk_check(vkCreateFramebuffer(m_device.device, &fb_info, nullptr,
+                                     &m_frame_bufs[i]));
     }
 
     // Create Synchronization structures
@@ -276,34 +200,37 @@ GraphicsEngine::GraphicsEngine() {
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT,
     };
-    vk_check(vkCreateFence(m_device, &fence_info, nullptr, &m_fence_render));
+    vk_check(
+        vkCreateFence(m_device.device, &fence_info, nullptr, &m_fence_render));
 
     VkSemaphoreCreateInfo semph_info{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
-    vk_check(
-        vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_present));
-    vk_check(
-        vkCreateSemaphore(m_device, &semph_info, nullptr, &m_semph_render));
+    vk_check(vkCreateSemaphore(m_device.device, &semph_info, nullptr,
+                               &m_semph_present));
+    vk_check(vkCreateSemaphore(m_device.device, &semph_info, nullptr,
+                               &m_semph_render));
 
     // Create the pipeline
-    GraphicsPipelineBuilder(m_device)
-        .add_shader(VK_SHADER_STAGE_VERTEX_BIT, mesh_vert, sizeof(mesh_vert))
-        ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, mesh_frag, sizeof(mesh_frag))
-        ->set_extent(m_window_extent)
-        ->set_render_pass(m_render_pass)
-        ->add_push_constant_range({
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0,
-            .size = sizeof(glm::mat4),
-        })
-        ->build(&m_pipeline);
+    m_pipeline = GraphicsPipelineBuilder(m_device.device)
+                     .add_shader(VK_SHADER_STAGE_VERTEX_BIT, mesh_vert,
+                                 sizeof(mesh_vert))
+                     ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, mesh_frag,
+                                  sizeof(mesh_frag))
+                     ->set_extent(m_window_extent)
+                     ->set_render_pass(m_render_pass)
+                     ->add_push_constant_range({
+                         .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                         .offset = 0,
+                         .size = sizeof(glm::mat4),
+                     })
+                     ->build();
 
     // create allocator
     VmaAllocatorCreateInfo allocator_info{
-        .physicalDevice = m_gpu,
-        .device = m_device,
-        .instance = m_instance,
+        .physicalDevice = m_application.device,
+        .device = m_device.device,
+        .instance = m_application.instance,
     };
     vmaCreateAllocator(&allocator_info, &m_allocator);
 
@@ -327,8 +254,8 @@ GraphicsEngine::~GraphicsEngine() {
         return;
     }
     // Wait for the gpu to finish the pending work
-    vk_check(
-        vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
+    vk_check(vkWaitForFences(m_device.device, 1, &m_fence_render, true,
+                             one_second_ns));
 
     // Destroy in the inverse order of creation
     for (auto m : m_meshes) {
@@ -336,19 +263,19 @@ GraphicsEngine::~GraphicsEngine() {
     };
     vmaDestroyAllocator(m_allocator);
     m_pipeline.destroy();
-    vkDestroySemaphore(m_device, m_semph_render, nullptr);
-    vkDestroySemaphore(m_device, m_semph_present, nullptr);
-    vkDestroyFence(m_device, m_fence_render, nullptr);
-    vkDestroyCommandPool(m_device, m_cmd_pool, nullptr);
-    vkDestroySwapchainKHR(m_device, m_swapchain, nullptr);
-    vkDestroyRenderPass(m_device, m_render_pass, nullptr);
+    vkDestroySemaphore(m_device.device, m_semph_render, nullptr);
+    vkDestroySemaphore(m_device.device, m_semph_present, nullptr);
+    vkDestroyFence(m_device.device, m_fence_render, nullptr);
+    vkDestroyCommandPool(m_device.device, m_cmd_pool, nullptr);
+    vkDestroySwapchainKHR(m_device.device, m_swapchain, nullptr);
+    vkDestroyRenderPass(m_device.device, m_render_pass, nullptr);
     for (size_t i = 0; i < m_frame_bufs.size(); i++) {
-        vkDestroyFramebuffer(m_device, m_frame_bufs[i], nullptr);
-        vkDestroyImageView(m_device, m_swapchain_views[i], nullptr);
+        vkDestroyFramebuffer(m_device.device, m_frame_bufs[i], nullptr);
+        vkDestroyImageView(m_device.device, m_swapchain_views[i], nullptr);
     }
-    vkDestroyDevice(m_device, nullptr);
-    vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-    vkDestroyInstance(m_instance, nullptr);
+    m_device.destroy();
+    vkDestroySurfaceKHR(m_application.instance, m_surface, nullptr);
+    m_application.destroy();
     SDL_DestroyWindow(m_window);
 
     printf("VulkanEngine::cleanup OK\n");
@@ -371,13 +298,13 @@ run_QUIT:
 }
 
 void GraphicsEngine::draw() {
-    vk_check(
-        vkWaitForFences(m_device, 1, &m_fence_render, true, one_second_ns));
-    vk_check(vkResetFences(m_device, 1, &m_fence_render));
+    vk_check(vkWaitForFences(m_device.device, 1, &m_fence_render, true,
+                             one_second_ns));
+    vk_check(vkResetFences(m_device.device, 1, &m_fence_render));
     vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
 
     uint32_t swap_img_idx;
-    vk_check(vkAcquireNextImageKHR(m_device, m_swapchain, one_second_ns,
+    vk_check(vkAcquireNextImageKHR(m_device.device, m_swapchain, one_second_ns,
                                    m_semph_present, nullptr, &swap_img_idx));
 
     VkCommandBufferBeginInfo cmd_begin_info{

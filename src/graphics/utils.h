@@ -14,8 +14,10 @@ struct AllocatedBuffer {
 };
 
 inline void vk_check(VkResult err) {
+#ifndef NDEBUG
     if (err) {
         printf("Detected Vulkan error: %d\n", err);
-        abort();
+        assert(!err);
     }
+#endif
 }

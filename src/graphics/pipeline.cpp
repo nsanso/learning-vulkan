@@ -43,8 +43,9 @@ GraphicsPipelineBuilder* GraphicsPipelineBuilder::add_push_constant_range(
     return this;
 }
 
-void GraphicsPipelineBuilder::build(GraphicsPipeline* destination) {
-    destination->device = device;
+GraphicsPipeline GraphicsPipelineBuilder::build() {
+    GraphicsPipeline destination{};
+    destination.device = device;
 
     auto bindings = Vertex::get_bindings();
     auto attributes = Vertex::get_attributes();
@@ -58,19 +59,21 @@ void GraphicsPipelineBuilder::build(GraphicsPipeline* destination) {
     layout_info.pPushConstantRanges = push_constant_ranges.data();
 
     vk_check(vkCreatePipelineLayout(device, &layout_info, nullptr,
-                                    &destination->layout));
+                                    &destination.layout));
 
     pipeline_info.stageCount = shader_stages.size();
     pipeline_info.pStages = shader_stages.data();
-    pipeline_info.layout = destination->layout;
+    pipeline_info.layout = destination.layout;
     pipeline_info.renderPass = render_pass;
     vk_check(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
                                        &pipeline_info, nullptr,
-                                       &destination->pipeline));
+                                       &destination.pipeline));
 
     for (auto stage : shader_stages) {
         vkDestroyShaderModule(device, stage.module, nullptr);
     }
+
+    return destination;
 }
 
 void GraphicsPipeline::destroy() {

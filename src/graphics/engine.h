@@ -6,6 +6,8 @@
 
 #include <vector>
 
+#include "application.h"
+#include "device.h"
 #include "pipeline.h"
 #include "utils.h"
 
@@ -26,11 +28,10 @@ class GraphicsEngine {
     VkExtent2D m_window_extent{1280, 720};
     struct SDL_Window *m_window{nullptr};
 
-    VkInstance m_instance;
     VkSurfaceKHR m_surface;
 
-    VkPhysicalDevice m_gpu;
-    VkDevice m_device;
+    GraphicsApplication m_application;
+    GraphicsDevice m_device;
 
     VkSwapchainKHR m_swapchain;
     VkSurfaceFormatKHR m_surface_format;

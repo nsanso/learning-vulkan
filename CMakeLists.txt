@@ -10,9 +10,19 @@ set(CMAKE_BUILD_TYPE Debug)
 # Sources
 list(APPEND sources
         src/main.cpp
-        src/engine/engine.cpp
-        src/engine/mesh.cpp
-        src/engine/pipeline.cpp
+        src/graphics/application.cpp
+        src/graphics/application.h
+        src/graphics/device.cpp
+        src/graphics/device.h
+        src/graphics/engine.cpp
+        src/graphics/engine.h
+        src/graphics/mesh.cpp
+        src/graphics/mesh.h
+        src/graphics/pipeline.cpp
+        src/graphics/pipeline.h
+        src/graphics/swapchain.cpp
+        src/graphics/swapchain.h
+        src/graphics/utils.h
 )
 
 # Shaders
