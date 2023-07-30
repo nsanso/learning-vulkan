@@ -34,17 +34,11 @@ GraphicsEngine::GraphicsEngine() {
     SDL_Vulkan_GetInstanceExtensions(m_window, &sdl_extension_count,
                                      sdl_extensions.data());
 
-    GraphicsApplicationBuilder application_builder =
-        GraphicsApplicationBuilder();
-
-    application_builder.set_application_name("Learning Vulkan")
-        ->set_application_version(0, 1, 0);
-
-    for (size_t i = 0; i < sdl_extension_count; i++) {
-        application_builder.add_instance_extension(sdl_extensions.at(i));
-    }
-
-    m_application = application_builder.build();
+    m_application = GraphicsApplicationBuilder()
+                        .set_application_name("Learning Vulkan")
+                        ->set_application_version(0, 1, 0)
+                        ->add_instance_extension(sdl_extensions)
+                        ->build();
 
     SDL_Vulkan_CreateSurface(m_window, m_application.instance, &m_surface);
 
@@ -56,75 +50,10 @@ GraphicsEngine::GraphicsEngine() {
 
     m_q_graphics = m_device.get_queue(m_qfamily_graphics);
 
-    printf("%d %p\n", m_qfamily_graphics, m_q_graphics);
-
-    // Get swapchain
-    VkSurfaceCapabilitiesKHR surface_capabilities;
-    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-        m_application.device, m_surface, &surface_capabilities));
-
-    uint32_t surface_format_count;
-    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_application.device, m_surface, &surface_format_count, nullptr));
-    std::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
-    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
-        m_application.device, m_surface, &surface_format_count,
-        surface_formats.data()));
-    m_surface_format = surface_formats.at(0);
-
-    uint32_t present_mode_count;
-    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_application.device, m_surface, &present_mode_count, nullptr));
-    std::vector<VkPresentModeKHR> present_modes(present_mode_count);
-    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
-        m_application.device, m_surface, &present_mode_count,
-        present_modes.data()));
-
-    VkSwapchainCreateInfoKHR swapchain_info{
-        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .surface = m_surface,
-        .minImageCount = surface_capabilities.minImageCount + 1,
-        .imageFormat = m_surface_format.format,
-        .imageColorSpace = m_surface_format.colorSpace,
-        .imageExtent = m_window_extent,
-        .imageArrayLayers = 1,
-        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = surface_capabilities.currentTransform,
-        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = VK_PRESENT_MODE_FIFO_KHR,
-        .clipped = VK_TRUE,
-    };
-    vk_check(vkCreateSwapchainKHR(m_device.device, &swapchain_info, nullptr,
-                                  &m_swapchain));
-
-    // Get swapchain images
-    uint32_t swapchain_image_count;
-    vkGetSwapchainImagesKHR(m_device.device, m_swapchain,
-                            &swapchain_image_count, nullptr);
-    m_swapchain_images.resize(swapchain_image_count);
-    vkGetSwapchainImagesKHR(m_device.device, m_swapchain,
-                            &swapchain_image_count, m_swapchain_images.data());
-
-    // Get swapchain image views
-    m_swapchain_views.resize(m_swapchain_images.size());
-    for (size_t i = 0; i < m_swapchain_images.size(); i++) {
-        VkImageViewCreateInfo view_info{
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image = m_swapchain_images.at(i),
-            .viewType = VK_IMAGE_VIEW_TYPE_2D,
-            .format = m_surface_format.format,
-            .subresourceRange{
-                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                .baseMipLevel = 0,
-                .levelCount = 1,
-                .baseArrayLayer = 0,
-                .layerCount = 1,
-            },
-        };
-        vk_check(vkCreateImageView(m_device.device, &view_info, nullptr,
-                                   &m_swapchain_views[i]));
-    }
+    m_swapchain = GraphicsSwapchainBuilder(m_application.device,
+                                           m_device.device, m_surface)
+                      .set_extent(m_window_extent)
+                      ->build();
 
     // Get Command pool
     VkCommandPoolCreateInfo command_pool_info{
@@ -147,7 +76,7 @@ GraphicsEngine::GraphicsEngine() {
 
     // Get Render pass
     VkAttachmentDescription color_attachment{
-        .format = m_surface_format.format,
+        .format = m_swapchain.format.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -189,10 +118,10 @@ GraphicsEngine::GraphicsEngine() {
         .layers = 1,
     };
 
-    m_frame_bufs = std::vector<VkFramebuffer>{m_swapchain_images.size()};
+    m_frame_bufs = std::vector<VkFramebuffer>{m_swapchain.images.size()};
 
-    for (size_t i = 0; i < m_swapchain_images.size(); i++) {
-        fb_info.pAttachments = &m_swapchain_views[i];
+    for (size_t i = 0; i < m_swapchain.images.size(); i++) {
+        fb_info.pAttachments = &m_swapchain.views[i];
         vk_check(vkCreateFramebuffer(m_device.device, &fb_info, nullptr,
                                      &m_frame_bufs[i]));
     }
@@ -269,12 +198,11 @@ GraphicsEngine::~GraphicsEngine() {
     vkDestroySemaphore(m_device.device, m_semph_present, nullptr);
     vkDestroyFence(m_device.device, m_fence_render, nullptr);
     vkDestroyCommandPool(m_device.device, m_cmd_pool, nullptr);
-    vkDestroySwapchainKHR(m_device.device, m_swapchain, nullptr);
     vkDestroyRenderPass(m_device.device, m_render_pass, nullptr);
     for (size_t i = 0; i < m_frame_bufs.size(); i++) {
         vkDestroyFramebuffer(m_device.device, m_frame_bufs[i], nullptr);
-        vkDestroyImageView(m_device.device, m_swapchain_views[i], nullptr);
     }
+    m_swapchain.destroy();
     m_device.destroy();
     vkDestroySurfaceKHR(m_application.instance, m_surface, nullptr);
     m_application.destroy();
@@ -306,8 +234,9 @@ void GraphicsEngine::draw() {
     vk_check(vkResetCommandBuffer(m_cmd_buf, 0));
 
     uint32_t swap_img_idx;
-    vk_check(vkAcquireNextImageKHR(m_device.device, m_swapchain, one_second_ns,
-                                   m_semph_present, nullptr, &swap_img_idx));
+    vk_check(vkAcquireNextImageKHR(m_device.device, m_swapchain.swapchain,
+                                   one_second_ns, m_semph_present, nullptr,
+                                   &swap_img_idx));
 
     VkCommandBufferBeginInfo cmd_begin_info{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -375,7 +304,7 @@ void GraphicsEngine::draw() {
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &m_semph_render,
         .swapchainCount = 1,
-        .pSwapchains = &m_swapchain,
+        .pSwapchains = &m_swapchain.swapchain,
         .pImageIndices = &swap_img_idx,
     };
     vk_check(vkQueuePresentKHR(m_q_graphics, &present_info));

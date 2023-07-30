@@ -27,7 +27,9 @@ class GraphicsApplicationBuilder {
                                                         uint32_t minor,
                                                         uint32_t patch);
     GraphicsApplicationBuilder *add_validation_layer(const char *layer);
-    GraphicsApplicationBuilder *add_instance_extension(const char *layer);
+    GraphicsApplicationBuilder *add_instance_extension(const char *extension);
+    GraphicsApplicationBuilder *add_instance_extension(
+        std::vector<const char *> extensions);
     GraphicsApplicationBuilder *add_device_extension(const char *layer);
 
     GraphicsApplicationBuilder()

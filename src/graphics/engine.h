@@ -9,6 +9,7 @@
 #include "application.h"
 #include "device.h"
 #include "pipeline.h"
+#include "swapchain.h"
 #include "utils.h"
 
 class GraphicsEngine {
@@ -33,10 +34,7 @@ class GraphicsEngine {
     GraphicsApplication m_application;
     GraphicsDevice m_device;
 
-    VkSwapchainKHR m_swapchain;
-    VkSurfaceFormatKHR m_surface_format;
-    std::vector<VkImage> m_swapchain_images;
-    std::vector<VkImageView> m_swapchain_views;
+    GraphicsSwapchain m_swapchain;
 
     uint32_t m_qfamily_graphics{uint32_t(~0)};
     VkQueue m_q_graphics;

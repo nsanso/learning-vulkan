@@ -48,6 +48,13 @@ GraphicsApplicationBuilder *GraphicsApplicationBuilder::add_instance_extension(
     return this;
 };
 
+GraphicsApplicationBuilder *GraphicsApplicationBuilder::add_instance_extension(
+    std::vector<const char *> extensions) {
+    instance_extensions.insert(instance_extensions.end(), extensions.begin(),
+                               extensions.end());
+    return this;
+};
+
 GraphicsApplication GraphicsApplicationBuilder::build() {
     GraphicsApplication destination{};
 
