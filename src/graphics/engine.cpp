@@ -56,6 +56,8 @@ GraphicsEngine::GraphicsEngine() {
 
     m_q_graphics = m_device.get_queue(m_qfamily_graphics);
 
+    printf("%d %p\n", m_qfamily_graphics, m_q_graphics);
+
     // Get swapchain
     VkSurfaceCapabilitiesKHR surface_capabilities;
     vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(

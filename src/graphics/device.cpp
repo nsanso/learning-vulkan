@@ -54,16 +54,14 @@ GraphicsDevice GraphicsDeviceBuilder::build() {
     vk_check(vkCreateDevice(physical_device, &device_info, nullptr,
                             &destination.device));
 
-    std::vector<GraphicsQueue> queues{};
+    destination.queues.resize(queue_infos.size());
     for (size_t i = 0; i < queue_infos.size(); i++) {
         GraphicsQueue queue{
             .family = queue_infos.at(i).queueFamilyIndex,
         };
         vkGetDeviceQueue(destination.device, queue.family, i, &queue.handle);
-        queues.push_back(queue);
+        destination.queues.at(i) = queue;
     }
-
-    (std::vector<GraphicsQueue>)destination.queues = queues;
 
     return destination;
 }
