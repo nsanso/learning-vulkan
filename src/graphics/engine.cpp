@@ -2,14 +2,9 @@
 
 #include <src/shaders/mesh.frag.h>
 #include <src/shaders/mesh.vert.h>
-#include <vulkan/vulkan_core.h>
 
 #include <algorithm>
 #include <cstdio>
-
-#include "device.h"
-#include "pipeline.h"
-#include "utils.h"
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -83,101 +78,7 @@ GraphicsEngine::GraphicsEngine() {
                                       &m_cmd_buf));
 
     // Get Render pass
-    VkAttachmentDescription color_attachment{
-        .format = m_swapchain.format.format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    };
-
-    VkAttachmentReference color_attachment_ref{
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
-
-    VkSubpassDependency color_dependency{
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-    };
-
-    VkAttachmentDescription depth_attachment{
-        .format = m_swapchain.depth_format,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    };
-
-    VkAttachmentReference depth_attachment_ref{
-        .attachment = 1,
-        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-    };
-
-    VkSubpassDependency depth_dependency{
-        .srcSubpass = VK_SUBPASS_EXTERNAL,
-        .dstSubpass = 0,
-        .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-        .srcAccessMask = 0,
-        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-    };
-
-    VkSubpassDescription subpass{
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &color_attachment_ref,
-        .pDepthStencilAttachment = &depth_attachment_ref,
-    };
-
-    VkAttachmentDescription attachments[] = {color_attachment,
-                                             depth_attachment};
-    VkSubpassDependency dependencies[] = {color_dependency, depth_dependency};
-    VkRenderPassCreateInfo render_pass_info{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = sizeof(attachments) / sizeof(attachments[0]),
-        .pAttachments = attachments,
-        .subpassCount = 1,
-        .pSubpasses = &subpass,
-        .dependencyCount = sizeof(dependencies) / sizeof(dependencies[0]),
-        .pDependencies = dependencies,
-    };
-    vk_check(vkCreateRenderPass(m_device.device, &render_pass_info, nullptr,
-                                &m_render_pass));
-
-    // Get Frame buffer
-    VkFramebufferCreateInfo fb_info{
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .pNext = nullptr,
-        .renderPass = m_render_pass,
-        .width = m_window_extent.width,
-        .height = m_window_extent.height,
-        .layers = 1,
-    };
-
-    m_frame_bufs = std::vector<VkFramebuffer>{m_swapchain.images.size()};
-
-    for (size_t i = 0; i < m_swapchain.images.size(); i++) {
-        VkImageView attachments[]{m_swapchain.views[i], m_swapchain.depth_view};
-
-        fb_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
-        fb_info.pAttachments = attachments;
-
-        vk_check(vkCreateFramebuffer(m_device.device, &fb_info, nullptr,
-                                     &m_frame_bufs[i]));
-    }
+    m_render = GraphicsRenderBuilder(m_swapchain, m_device.device).build();
 
     // Create Synchronization structures
     VkFenceCreateInfo fence_info{
@@ -202,7 +103,7 @@ GraphicsEngine::GraphicsEngine() {
                      ->add_shader(VK_SHADER_STAGE_FRAGMENT_BIT, mesh_frag,
                                   sizeof(mesh_frag))
                      ->set_extent(m_window_extent)
-                     ->set_render_pass(m_render_pass)
+                     ->set_render_pass(m_render.renderpass)
                      ->add_push_constant_range({
                          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
                          .offset = 0,
@@ -225,16 +126,10 @@ GraphicsEngine::GraphicsEngine() {
         m_meshes.push_back(monkey.value());
     }
 
-    // done
-    m_initialized = true;
     printf("VulkanEngine::init OK\n");
 }
 
 GraphicsEngine::~GraphicsEngine() {
-    if (!m_initialized) {
-        printf("VulkanEngine::cleanup: not initialized\n");
-        return;
-    }
     // Wait for the gpu to finish the pending work
     vk_check(vkWaitForFences(m_device.device, 1, &m_fence_render, true,
                              one_second_ns));
@@ -248,10 +143,7 @@ GraphicsEngine::~GraphicsEngine() {
     vkDestroySemaphore(m_device.device, m_semph_present, nullptr);
     vkDestroyFence(m_device.device, m_fence_render, nullptr);
     vkDestroyCommandPool(m_device.device, m_cmd_pool, nullptr);
-    vkDestroyRenderPass(m_device.device, m_render_pass, nullptr);
-    for (size_t i = 0; i < m_frame_bufs.size(); i++) {
-        vkDestroyFramebuffer(m_device.device, m_frame_bufs[i], nullptr);
-    }
+    m_render.destroy();
     m_swapchain.destroy();
     vmaDestroyAllocator(m_allocator);
     m_device.destroy();
@@ -302,8 +194,8 @@ void GraphicsEngine::draw() {
 
     VkRenderPassBeginInfo renderpass_begin_info{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = m_render_pass,
-        .framebuffer = m_frame_bufs[swap_img_idx],
+        .renderPass = m_render.renderpass,
+        .framebuffer = m_render.framebuffers[swap_img_idx],
         .renderArea{
             .extent = m_window_extent,
         },
@@ -353,7 +245,7 @@ void GraphicsEngine::draw() {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &m_semph_present,
-        .pWaitDstStageMask = &wait_stage,  // you'll learn about this later
+        .pWaitDstStageMask = &wait_stage,
         .commandBufferCount = 1,
         .pCommandBuffers = &m_cmd_buf,
         .signalSemaphoreCount = 1,

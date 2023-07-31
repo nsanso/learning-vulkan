@@ -3,12 +3,14 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_vulkan.h>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_core.h>
 
 #include <vector>
 
 #include "application.h"
 #include "device.h"
 #include "pipeline.h"
+#include "render.h"
 #include "swapchain.h"
 #include "utils.h"
 
@@ -42,8 +44,7 @@ class GraphicsEngine {
     VkCommandPool m_cmd_pool;
     VkCommandBuffer m_cmd_buf;
 
-    VkRenderPass m_render_pass;
-    std::vector<VkFramebuffer> m_frame_bufs;
+    GraphicsRender m_render;
 
     VkSemaphore m_semph_present;
     VkSemaphore m_semph_render;

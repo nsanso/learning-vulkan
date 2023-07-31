@@ -16,6 +16,7 @@ class GraphicsSwapchain {
     VkFormat depth_format;
     VkImage depth_image;
     VkImageView depth_view;
+    VkExtent2D extent;
 
     void destroy();
 

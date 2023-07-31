@@ -73,6 +73,7 @@ GraphicsSwapchain GraphicsSwapchainBuilder::build() {
     GraphicsSwapchain destination{};
     destination.m_device = m_device;
     destination.m_allocator = m_allocator;
+    destination.extent = m_extent;
 
     destination.format = formats.at(0);
     destination.capabilities = capabilities;

@@ -20,6 +20,8 @@ list(APPEND sources
         src/graphics/mesh.h
         src/graphics/pipeline.cpp
         src/graphics/pipeline.h
+        src/graphics/render.cpp
+        src/graphics/render.h
         src/graphics/swapchain.cpp
         src/graphics/swapchain.h
         src/graphics/utils.h
