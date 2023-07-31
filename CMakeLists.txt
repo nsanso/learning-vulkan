@@ -31,6 +31,9 @@ list(APPEND shaders
         src/shaders/mesh.frag
 )
 
+# Assets
+cmake_path(SET assets "${CMAKE_SOURCE_DIR}/vendor/vulkan-guide/assets/")
+
 # External dependencies
 find_package(Threads REQUIRED)
 list(APPEND libs ${CMAKE_THREAD_LIBS_INIT})
@@ -54,6 +57,9 @@ list(APPEND libs VulkanMemoryAllocator)
 add_subdirectory(vendor/glm)
 list(APPEND libs glm::glm)
 
+add_subdirectory(vendor/tinyobjloader)
+list(APPEND libs tinyobjloader)
+
 # Compile shaders
 set(shader_dir ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 list(APPEND includes ${shader_dir})
@@ -73,12 +79,12 @@ endforeach(s)
 add_custom_target(shader_target DEPENDS ${shader_headers})
 
 # Executable target
-set(target learning-vulkan)
 if (WIN32)
-add_executable(${target} WIN32 ${sources})
+        add_executable(${PROJECT_NAME} WIN32 ${sources})
 else()
-add_executable(${target} ${sources})
+        add_executable(${PROJECT_NAME} ${sources})
 endif()
-target_link_libraries(${target} ${libs})
-add_dependencies(${target} shader_target)
-target_include_directories(${target} PRIVATE ${includes}) 
+target_link_libraries(${PROJECT_NAME} ${libs})
+add_dependencies(${PROJECT_NAME} shader_target)
+target_include_directories(${PROJECT_NAME} PRIVATE ${includes}) 
+target_compile_definitions(${PROJECT_NAME} PRIVATE "ASSETS_PATH=\"${assets}\"")

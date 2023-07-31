@@ -1,6 +1,7 @@
 #pragma once
 
 #include <glm/vec3.hpp>
+#include <optional>
 #include <vector>
 
 #include "utils.h"
@@ -56,6 +57,10 @@ class Mesh {
     std::vector<Vertex> vertices;
     AllocatedBuffer vertex_buffer;
     void destroy();
+
+    static std::optional<Mesh> from_obj(VmaAllocator allocator,
+                                        const char* directory,
+                                        const char* filename);
 
    private:
     VmaAllocator allocator;

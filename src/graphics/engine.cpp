@@ -50,7 +50,15 @@ GraphicsEngine::GraphicsEngine() {
 
     m_q_graphics = m_device.get_queue(m_qfamily_graphics);
 
-    m_swapchain = GraphicsSwapchainBuilder(m_application.device,
+    // create allocator
+    VmaAllocatorCreateInfo allocator_info{
+        .physicalDevice = m_application.device,
+        .device = m_device.device,
+        .instance = m_application.instance,
+    };
+    vmaCreateAllocator(&allocator_info, &m_allocator);
+
+    m_swapchain = GraphicsSwapchainBuilder(m_application.device, m_allocator,
                                            m_device.device, m_surface)
                       .set_extent(m_window_extent)
                       ->build();
@@ -91,18 +99,60 @@ GraphicsEngine::GraphicsEngine() {
         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
 
+    VkSubpassDependency color_dependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    };
+
+    VkAttachmentDescription depth_attachment{
+        .format = m_swapchain.depth_format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+
+    VkAttachmentReference depth_attachment_ref{
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    };
+
+    VkSubpassDependency depth_dependency{
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    };
+
     VkSubpassDescription subpass{
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
         .pColorAttachments = &color_attachment_ref,
+        .pDepthStencilAttachment = &depth_attachment_ref,
     };
 
+    VkAttachmentDescription attachments[] = {color_attachment,
+                                             depth_attachment};
+    VkSubpassDependency dependencies[] = {color_dependency, depth_dependency};
     VkRenderPassCreateInfo render_pass_info{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = 1,
-        .pAttachments = &color_attachment,
+        .attachmentCount = sizeof(attachments) / sizeof(attachments[0]),
+        .pAttachments = attachments,
         .subpassCount = 1,
         .pSubpasses = &subpass,
+        .dependencyCount = sizeof(dependencies) / sizeof(dependencies[0]),
+        .pDependencies = dependencies,
     };
     vk_check(vkCreateRenderPass(m_device.device, &render_pass_info, nullptr,
                                 &m_render_pass));
@@ -112,7 +162,6 @@ GraphicsEngine::GraphicsEngine() {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .pNext = nullptr,
         .renderPass = m_render_pass,
-        .attachmentCount = 1,
         .width = m_window_extent.width,
         .height = m_window_extent.height,
         .layers = 1,
@@ -121,7 +170,11 @@ GraphicsEngine::GraphicsEngine() {
     m_frame_bufs = std::vector<VkFramebuffer>{m_swapchain.images.size()};
 
     for (size_t i = 0; i < m_swapchain.images.size(); i++) {
-        fb_info.pAttachments = &m_swapchain.views[i];
+        VkImageView attachments[]{m_swapchain.views[i], m_swapchain.depth_view};
+
+        fb_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+        fb_info.pAttachments = attachments;
+
         vk_check(vkCreateFramebuffer(m_device.device, &fb_info, nullptr,
                                      &m_frame_bufs[i]));
     }
@@ -157,14 +210,6 @@ GraphicsEngine::GraphicsEngine() {
                      })
                      ->build();
 
-    // create allocator
-    VmaAllocatorCreateInfo allocator_info{
-        .physicalDevice = m_application.device,
-        .device = m_device.device,
-        .instance = m_application.instance,
-    };
-    vmaCreateAllocator(&allocator_info, &m_allocator);
-
     // load mesh
     m_meshes.push_back(
         Mesh(m_allocator,
@@ -173,6 +218,12 @@ GraphicsEngine::GraphicsEngine() {
                  Vertex{.position{-.5f, 0.f, 0.f}, .color{0.f, 1.f, 0.f}},
                  Vertex{.position{0.f, 1.f, 0.f}, .color{0.f, 0.f, 1.f}},
              }));
+
+    auto monkey = Mesh::from_obj(m_allocator, ASSETS_PATH, "monkey_smooth.obj");
+
+    if (monkey) {
+        m_meshes.push_back(monkey.value());
+    }
 
     // done
     m_initialized = true;
@@ -192,7 +243,6 @@ GraphicsEngine::~GraphicsEngine() {
     for (auto m : m_meshes) {
         m.destroy();
     };
-    vmaDestroyAllocator(m_allocator);
     m_pipeline.destroy();
     vkDestroySemaphore(m_device.device, m_semph_render, nullptr);
     vkDestroySemaphore(m_device.device, m_semph_present, nullptr);
@@ -203,6 +253,7 @@ GraphicsEngine::~GraphicsEngine() {
         vkDestroyFramebuffer(m_device.device, m_frame_bufs[i], nullptr);
     }
     m_swapchain.destroy();
+    vmaDestroyAllocator(m_allocator);
     m_device.destroy();
     vkDestroySurfaceKHR(m_application.instance, m_surface, nullptr);
     m_application.destroy();
@@ -217,14 +268,11 @@ void GraphicsEngine::run() {
     while (true) {
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT) {
-                goto run_QUIT;
+                return;
             }
         }
         draw();
     }
-
-run_QUIT:
-    return;
 }
 
 void GraphicsEngine::draw() {
@@ -244,7 +292,14 @@ void GraphicsEngine::draw() {
     };
     vk_check(vkBeginCommandBuffer(m_cmd_buf, &cmd_begin_info));
 
-    VkClearValue clear_value{.color{.float32{.0f, 0.f, 0.f, 0.f}}};
+    VkClearValue clear_values[]{
+        // color
+        VkClearValue{.color{.float32{.0f, 0.f, 0.f, 0.f}}},
+        // depth
+        VkClearValue{
+            .depthStencil{.depth = 1.f},
+        }};
+
     VkRenderPassBeginInfo renderpass_begin_info{
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = m_render_pass,
@@ -252,8 +307,8 @@ void GraphicsEngine::draw() {
         .renderArea{
             .extent = m_window_extent,
         },
-        .clearValueCount = 1,
-        .pClearValues = &clear_value,
+        .clearValueCount = sizeof(clear_values) / sizeof(clear_values[0]),
+        .pClearValues = clear_values,
     };
     vkCmdBeginRenderPass(m_cmd_buf, &renderpass_begin_info,
                          VK_SUBPASS_CONTENTS_INLINE);
@@ -262,14 +317,11 @@ void GraphicsEngine::draw() {
     vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       m_pipeline.pipeline);
 
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(m_cmd_buf, 0, 1,
-                           &m_meshes.at(0).vertex_buffer.buffer, &offset);
-
     glm::vec3 camera_position{0.f, 0.f, -2.f};
     glm::mat4 view = glm::translate(glm::mat4(1.f), camera_position);
     glm::mat4 proj =
         glm::perspective(glm::radians(90.f), 16.f / 9.f, 0.1f, 200.f);
+    proj[1][1] *= -1;  // Make the y axis point upwards
     glm::mat4 model =
         glm::rotate(glm::mat4{1.f}, glm::radians(m_frame_count * 0.4f),
                     glm::vec3{0.f, 1.f, 0.f});
@@ -278,7 +330,17 @@ void GraphicsEngine::draw() {
     vkCmdPushConstants(m_cmd_buf, m_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT,
                        0, sizeof(glm::mat4), &transform);
 
-    vkCmdDraw(m_cmd_buf, m_meshes.at(0).vertices.size(), 1, 0, 0);
+    VkDeviceSize offset = 0;
+
+    // // Draw Triangle
+    // vkCmdBindVertexBuffers(m_cmd_buf, 0, 1,
+    //                        &m_meshes.at(0).vertex_buffer.buffer, &offset);
+    // vkCmdDraw(m_cmd_buf, m_meshes.at(0).vertices.size(), 1, 0, 0);
+
+    // Draw Monke
+    vkCmdBindVertexBuffers(m_cmd_buf, 0, 1,
+                           &m_meshes.at(1).vertex_buffer.buffer, &offset);
+    vkCmdDraw(m_cmd_buf, m_meshes.at(1).vertices.size(), 1, 0, 0);
 
     // finalize the render pass and the command buffer
     vkCmdEndRenderPass(m_cmd_buf);

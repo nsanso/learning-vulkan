@@ -75,6 +75,18 @@ class GraphicsPipelineBuilder {
               .attachmentCount = 1,
               .pAttachments = &colorblend_attachment}),
 
+          depthstencil_info(VkPipelineDepthStencilStateCreateInfo{
+              .sType =
+                  VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+              .depthTestEnable = VK_TRUE,
+              .depthWriteEnable = VK_TRUE,
+              .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+              .depthBoundsTestEnable = VK_FALSE,
+              .stencilTestEnable = VK_FALSE,
+              .minDepthBounds = 0.0f,
+              .maxDepthBounds = 1.0f,
+          }),
+
           layout_info(VkPipelineLayoutCreateInfo{
               .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO}),
 
@@ -85,6 +97,7 @@ class GraphicsPipelineBuilder {
               .pViewportState = &viewport_info,
               .pRasterizationState = &rasterization_info,
               .pMultisampleState = &multisample_info,
+              .pDepthStencilState = &depthstencil_info,
               .pColorBlendState = &colorblend_info}) {}
 
    private:
@@ -104,6 +117,7 @@ class GraphicsPipelineBuilder {
     VkPipelineViewportStateCreateInfo viewport_info;
     VkPipelineColorBlendAttachmentState colorblend_attachment;
     VkPipelineColorBlendStateCreateInfo colorblend_info;
+    VkPipelineDepthStencilStateCreateInfo depthstencil_info;
     VkPipelineLayoutCreateInfo layout_info;
     VkGraphicsPipelineCreateInfo pipeline_info;
 };

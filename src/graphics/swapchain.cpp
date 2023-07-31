@@ -7,6 +7,8 @@
 #include "utils.h"
 
 void GraphicsSwapchain::destroy() {
+    vkDestroyImageView(m_device, depth_view, nullptr);
+    vmaDestroyImage(m_allocator, depth_image, m_depth_allocation);
     vkDestroySwapchainKHR(m_device, swapchain, nullptr);
     for (size_t i = 0; i < views.size(); i++) {
         vkDestroyImageView(m_device, views.at(i), nullptr);
@@ -14,7 +16,8 @@ void GraphicsSwapchain::destroy() {
 }
 
 GraphicsSwapchainBuilder::GraphicsSwapchainBuilder(
-    VkPhysicalDevice physical_device, VkDevice device, VkSurfaceKHR surface)
+    VkPhysicalDevice physical_device, VmaAllocator allocator, VkDevice device,
+    VkSurfaceKHR surface)
     : m_physical_device(physical_device),
       m_device(device),
       m_surface(surface),
@@ -31,7 +34,8 @@ GraphicsSwapchainBuilder::GraphicsSwapchainBuilder(
           .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
           .presentMode = VK_PRESENT_MODE_FIFO_KHR,
           .clipped = VK_TRUE,
-      }) {
+      }),
+      m_allocator(allocator) {
     vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         m_physical_device, m_surface, &capabilities));
 
@@ -68,6 +72,8 @@ GraphicsSwapchainBuilder* GraphicsSwapchainBuilder::set_extent(
 GraphicsSwapchain GraphicsSwapchainBuilder::build() {
     GraphicsSwapchain destination{};
     destination.m_device = m_device;
+    destination.m_allocator = m_allocator;
+
     destination.format = formats.at(0);
     destination.capabilities = capabilities;
     destination.present_modes = present_modes;
@@ -106,6 +112,49 @@ GraphicsSwapchain GraphicsSwapchainBuilder::build() {
         vk_check(vkCreateImageView(m_device, &view_info, nullptr,
                                    &destination.views.at(i)));
     }
+
+    // Get depth image
+    destination.depth_format = VK_FORMAT_D32_SFLOAT;
+
+    VkImageCreateInfo depth_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = destination.depth_format,
+        .extent =
+            VkExtent3D{
+                .width = m_extent.width,
+                .height = m_extent.height,
+                .depth = 1,
+            },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    };
+
+    VmaAllocationCreateInfo depth_alloc_info{
+        .usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE,
+        .requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
+
+    vmaCreateImage(m_allocator, &depth_info, &depth_alloc_info,
+                   &destination.depth_image, &destination.m_depth_allocation,
+                   nullptr);
+
+    // Get depth view
+    VkImageViewCreateInfo depth_view_info{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = destination.depth_image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = destination.depth_format,
+        .subresourceRange{
+            .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
+    };
+    vk_check(vkCreateImageView(m_device, &depth_view_info, nullptr,
+                               &destination.depth_view));
 
     return destination;
 }
