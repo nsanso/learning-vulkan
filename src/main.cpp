@@ -16,6 +16,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
     freopen_s((FILE **)stderr, "CONOUT$", "w", stderr);
     printf("Console attached!\n");
 #endif
-    return main(__argc, __argv);
+    int out = main(__argc, __argv);
+    Sleep(1000);
+    return out;
 }
 #endif
