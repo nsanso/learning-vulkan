@@ -36,21 +36,21 @@ GraphicsSwapchainBuilder::GraphicsSwapchainBuilder(
           .clipped = VK_TRUE,
       }),
       m_allocator(allocator) {
-    vk_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    assert(!vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         m_physical_device, m_surface, &capabilities));
 
     uint32_t format_count;
-    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, m_surface,
-                                                  &format_count, nullptr));
+    assert(!vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, m_surface,
+                                                 &format_count, nullptr));
     formats.resize(format_count);
-    vk_check(vkGetPhysicalDeviceSurfaceFormatsKHR(
+    assert(!vkGetPhysicalDeviceSurfaceFormatsKHR(
         m_physical_device, m_surface, &format_count, formats.data()));
 
     uint32_t present_mode_count;
-    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
+    assert(!vkGetPhysicalDeviceSurfacePresentModesKHR(
         m_physical_device, m_surface, &present_mode_count, nullptr));
     present_modes.resize(present_mode_count);
-    vk_check(vkGetPhysicalDeviceSurfacePresentModesKHR(
+    assert(!vkGetPhysicalDeviceSurfacePresentModesKHR(
         m_physical_device, m_surface, &present_mode_count,
         present_modes.data()));
 
@@ -83,8 +83,8 @@ GraphicsSwapchain GraphicsSwapchainBuilder::build() {
     create_info.imageFormat = destination.format.format;
     create_info.imageColorSpace = destination.format.colorSpace;
 
-    vk_check(vkCreateSwapchainKHR(m_device, &create_info, nullptr,
-                                  &destination.swapchain));
+    assert(!vkCreateSwapchainKHR(m_device, &create_info, nullptr,
+                                 &destination.swapchain));
 
     // Get swapchain images
     uint32_t swapchain_image_count;
@@ -110,8 +110,8 @@ GraphicsSwapchain GraphicsSwapchainBuilder::build() {
                 .layerCount = 1,
             },
         };
-        vk_check(vkCreateImageView(m_device, &view_info, nullptr,
-                                   &destination.views.at(i)));
+        assert(!vkCreateImageView(m_device, &view_info, nullptr,
+                                  &destination.views.at(i)));
     }
 
     // Get depth image
@@ -154,8 +154,8 @@ GraphicsSwapchain GraphicsSwapchainBuilder::build() {
             .layerCount = 1,
         },
     };
-    vk_check(vkCreateImageView(m_device, &depth_view_info, nullptr,
-                               &destination.depth_view));
+    assert(!vkCreateImageView(m_device, &depth_view_info, nullptr,
+                              &destination.depth_view));
 
     return destination;
 }

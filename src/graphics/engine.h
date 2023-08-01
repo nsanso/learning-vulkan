@@ -9,6 +9,7 @@
 
 #include "application.h"
 #include "device.h"
+#include "drawable.h"
 #include "pipeline.h"
 #include "render.h"
 #include "swapchain.h"
@@ -26,8 +27,6 @@ class GraphicsEngine {
    private:
     size_t m_frame_count{0};
 
-    bool m_initialized{false};
-
     VkExtent2D m_window_extent{1280, 720};
     struct SDL_Window *m_window{nullptr};
 
@@ -35,24 +34,22 @@ class GraphicsEngine {
 
     GraphicsApplication m_application;
     GraphicsDevice m_device;
-
-    GraphicsSwapchain m_swapchain;
-
     uint32_t m_qfamily_graphics{uint32_t(~0)};
     VkQueue m_q_graphics;
 
+    VmaAllocator m_allocator;
+
+    GraphicsSwapchain m_swapchain;
+    GraphicsRender m_render;
+
     VkCommandPool m_cmd_pool;
     VkCommandBuffer m_cmd_buf;
-
-    GraphicsRender m_render;
 
     VkSemaphore m_semph_present;
     VkSemaphore m_semph_render;
     VkFence m_fence_render;
 
-    GraphicsPipeline m_pipeline;
-
-    VmaAllocator m_allocator;
-
+    std::vector<Drawable> m_drawables;
+    std::vector<GraphicsPipeline> m_pipelines;
     std::vector<Mesh> m_meshes;
 };

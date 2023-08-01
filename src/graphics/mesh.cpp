@@ -21,7 +21,7 @@ Mesh::Mesh(VmaAllocator allocator, std::vector<Vertex> vertices)
         .usage = VMA_MEMORY_USAGE_AUTO,
     };
 
-    vk_check(vmaCreateBuffer(allocator, &buffer_info, &allocation_info,
+    assert(!vmaCreateBuffer(allocator, &buffer_info, &allocation_info,
                              &vertex_buffer.buffer, &vertex_buffer.allocation,
                              nullptr));
     void* data;

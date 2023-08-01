@@ -12,7 +12,7 @@ GraphicsPipelineBuilder* GraphicsPipelineBuilder::add_shader(
         .codeSize = size,
         .pCode = buffer,
     };
-    vk_check(vkCreateShaderModule(device, &createInfo, nullptr, &module));
+    assert(!vkCreateShaderModule(device, &createInfo, nullptr, &module));
     VkPipelineShaderStageCreateInfo info{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = stage,
@@ -58,14 +58,14 @@ GraphicsPipeline GraphicsPipelineBuilder::build() {
     layout_info.pushConstantRangeCount = push_constant_ranges.size();
     layout_info.pPushConstantRanges = push_constant_ranges.data();
 
-    vk_check(vkCreatePipelineLayout(device, &layout_info, nullptr,
+    assert(!vkCreatePipelineLayout(device, &layout_info, nullptr,
                                     &destination.layout));
 
     pipeline_info.stageCount = shader_stages.size();
     pipeline_info.pStages = shader_stages.data();
     pipeline_info.layout = destination.layout;
     pipeline_info.renderPass = render_pass;
-    vk_check(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
+    assert(!vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1,
                                        &pipeline_info, nullptr,
                                        &destination.pipeline));
 

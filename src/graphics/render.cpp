@@ -99,8 +99,8 @@ GraphicsRender GraphicsRenderBuilder::build() {
     GraphicsRender out{};
     out.m_device = m_device;
 
-    vk_check(vkCreateRenderPass(m_device, &render_pass_info, nullptr,
-                                &out.renderpass));
+    assert(!vkCreateRenderPass(m_device, &render_pass_info, nullptr,
+                               &out.renderpass));
     framebuffer_info.renderPass = out.renderpass;
 
     out.framebuffers.resize(m_swapchain.images.size());
@@ -111,8 +111,8 @@ GraphicsRender GraphicsRenderBuilder::build() {
             sizeof(attachments) / sizeof(attachments[0]);
         framebuffer_info.pAttachments = attachments;
 
-        vk_check(vkCreateFramebuffer(m_device, &framebuffer_info, nullptr,
-                                     &out.framebuffers[i]));
+        assert(!vkCreateFramebuffer(m_device, &framebuffer_info, nullptr,
+                                    &out.framebuffers[i]));
     }
 
     return out;

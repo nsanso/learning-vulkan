@@ -51,8 +51,8 @@ GraphicsDevice GraphicsDeviceBuilder::build() {
     device_info.enabledExtensionCount = (uint32_t)device_extensions.size();
     device_info.ppEnabledExtensionNames = device_extensions.data();
 
-    vk_check(vkCreateDevice(physical_device, &device_info, nullptr,
-                            &destination.device));
+    assert(!vkCreateDevice(physical_device, &device_info, nullptr,
+                           &destination.device));
 
     destination.queues.resize(queue_infos.size());
     for (size_t i = 0; i < queue_infos.size(); i++) {

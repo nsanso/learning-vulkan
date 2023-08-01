@@ -66,7 +66,7 @@ GraphicsApplication GraphicsApplicationBuilder::build() {
     instance_info.enabledExtensionCount = (uint32_t)instance_extensions.size();
     instance_info.ppEnabledExtensionNames = instance_extensions.data();
 
-    vk_check(vkCreateInstance(&instance_info, nullptr, &destination.instance));
+    assert(!vkCreateInstance(&instance_info, nullptr, &destination.instance));
 
     // Get device
     uint32_t device_count = 0;

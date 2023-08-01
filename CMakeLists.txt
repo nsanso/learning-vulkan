@@ -14,6 +14,7 @@ list(APPEND sources
         src/graphics/application.h
         src/graphics/device.cpp
         src/graphics/device.h
+        src/graphics/drawable.h
         src/graphics/engine.cpp
         src/graphics/engine.h
         src/graphics/mesh.cpp
@@ -30,7 +31,8 @@ list(APPEND sources
 # Shaders
 list(APPEND shaders
         src/shaders/mesh.vert
-        src/shaders/mesh.frag
+        src/shaders/color.frag
+        src/shaders/normal.frag
 )
 
 # Assets
