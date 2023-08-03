@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "application.h"
+#include "command.h"
 #include "device.h"
 #include "drawable.h"
 #include "pipeline.h"
@@ -42,12 +43,7 @@ class GraphicsEngine {
     GraphicsSwapchain m_swapchain;
     GraphicsRender m_render;
 
-    VkCommandPool m_cmd_pool;
-    VkCommandBuffer m_cmd_buf;
-
-    VkSemaphore m_semph_present;
-    VkSemaphore m_semph_render;
-    VkFence m_fence_render;
+    GraphicsCommand m_command;
 
     std::vector<Drawable> m_drawables;
     std::vector<GraphicsPipeline> m_pipelines;

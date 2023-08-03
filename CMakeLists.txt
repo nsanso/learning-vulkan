@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(learning-vulkan)
+project(playground)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -12,6 +12,8 @@ list(APPEND sources
         src/main.cpp
         src/graphics/application.cpp
         src/graphics/application.h
+        src/graphics/command.cpp
+        src/graphics/command.h
         src/graphics/device.cpp
         src/graphics/device.h
         src/graphics/drawable.h

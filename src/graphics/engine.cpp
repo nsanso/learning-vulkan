@@ -28,11 +28,7 @@ GraphicsEngine::GraphicsEngine()
       m_allocator(),
       m_swapchain(),
       m_render(),
-      m_cmd_pool(),
-      m_cmd_buf(),
-      m_semph_present(),
-      m_semph_render(),
-      m_fence_render(),
+      m_command(),
       m_pipelines(),
       m_meshes() {
     // NOTE: vk-bootstrap is giving me problems on windows.
@@ -83,40 +79,8 @@ GraphicsEngine::GraphicsEngine()
     // Get Render pass
     m_render = GraphicsRenderBuilder(m_swapchain, m_device.device).build();
 
-    // Get Command pool
-    VkCommandPoolCreateInfo command_pool_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = m_qfamily_graphics,
-    };
-    assert(!vkCreateCommandPool(m_device.device, &command_pool_info, nullptr,
-                                &m_cmd_pool));
-
-    // Get Command buffer
-    VkCommandBufferAllocateInfo cmdbuf_alloc_info{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = m_cmd_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    assert(!vkAllocateCommandBuffers(m_device.device, &cmdbuf_alloc_info,
-                                     &m_cmd_buf));
-
-    // Create Synchronization structures
-    VkFenceCreateInfo fence_info{
-        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-        .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-    };
-    assert(
-        !vkCreateFence(m_device.device, &fence_info, nullptr, &m_fence_render));
-
-    VkSemaphoreCreateInfo semph_info{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-    };
-    assert(!vkCreateSemaphore(m_device.device, &semph_info, nullptr,
-                              &m_semph_present));
-    assert(!vkCreateSemaphore(m_device.device, &semph_info, nullptr,
-                              &m_semph_render));
+    m_command =
+        GraphicsCommandBuilder{m_device.device, m_qfamily_graphics}.build();
 
     // Create the drawables
     Drawable monkey{};
@@ -200,7 +164,7 @@ GraphicsEngine::GraphicsEngine()
 
 GraphicsEngine::~GraphicsEngine() {
     // Wait for the gpu to finish the pending work
-    assert(!vkWaitForFences(m_device.device, 1, &m_fence_render, true,
+    assert(!vkWaitForFences(m_device.device, 1, &m_command.fence_render, true,
                             one_second_ns));
 
     // Destroy in the inverse order of creation
@@ -210,10 +174,7 @@ GraphicsEngine::~GraphicsEngine() {
     for (auto p : m_pipelines) {
         p.destroy();
     };
-    vkDestroySemaphore(m_device.device, m_semph_render, nullptr);
-    vkDestroySemaphore(m_device.device, m_semph_present, nullptr);
-    vkDestroyFence(m_device.device, m_fence_render, nullptr);
-    vkDestroyCommandPool(m_device.device, m_cmd_pool, nullptr);
+    m_command.destroy();
     m_render.destroy();
     m_swapchain.destroy();
     vmaDestroyAllocator(m_allocator);
@@ -239,21 +200,21 @@ void GraphicsEngine::run() {
 }
 
 void GraphicsEngine::draw() {
-    assert(!vkWaitForFences(m_device.device, 1, &m_fence_render, true,
+    assert(!vkWaitForFences(m_device.device, 1, &m_command.fence_render, true,
                             one_second_ns));
-    assert(!vkResetFences(m_device.device, 1, &m_fence_render));
-    assert(!vkResetCommandBuffer(m_cmd_buf, 0));
+    assert(!vkResetFences(m_device.device, 1, &m_command.fence_render));
+    assert(!vkResetCommandBuffer(m_command.cmd_buf, 0));
 
     uint32_t swap_img_idx;
     assert(!vkAcquireNextImageKHR(m_device.device, m_swapchain.swapchain,
-                                  one_second_ns, m_semph_present, nullptr,
-                                  &swap_img_idx));
+                                  one_second_ns, m_command.semph_present,
+                                  nullptr, &swap_img_idx));
 
     VkCommandBufferBeginInfo cmd_begin_info{
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
     };
-    assert(!vkBeginCommandBuffer(m_cmd_buf, &cmd_begin_info));
+    assert(!vkBeginCommandBuffer(m_command.cmd_buf, &cmd_begin_info));
 
     VkClearValue clear_values[]{
         // color
@@ -273,7 +234,7 @@ void GraphicsEngine::draw() {
         .clearValueCount = sizeof(clear_values) / sizeof(clear_values[0]),
         .pClearValues = clear_values,
     };
-    vkCmdBeginRenderPass(m_cmd_buf, &renderpass_begin_info,
+    vkCmdBeginRenderPass(m_command.cmd_buf, &renderpass_begin_info,
                          VK_SUBPASS_CONTENTS_INLINE);
 
     // Draw
@@ -289,28 +250,29 @@ void GraphicsEngine::draw() {
     for (auto d : m_drawables) {
         if (d.material_hdl != current_material) {
             current_material = d.material_hdl;
-            vkCmdBindPipeline(m_cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+            vkCmdBindPipeline(m_command.cmd_buf,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
                               m_pipelines.at(current_material).pipeline);
         }
         if (d.mesh_hdl != current_mesh) {
             current_mesh = d.mesh_hdl;
             VkDeviceSize offset = 0;
             vkCmdBindVertexBuffers(
-                m_cmd_buf, 0, 1,
+                m_command.cmd_buf, 0, 1,
                 &m_meshes.at(current_mesh).vertex_buffer.buffer, &offset);
         }
 
         glm::mat4 transform = proj * view * d.model;
-        vkCmdPushConstants(m_cmd_buf, m_pipelines.at(current_material).layout,
-                           VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4),
-                           &transform);
-        vkCmdDraw(m_cmd_buf, m_meshes.at(current_mesh).vertices.size(), 1, 0,
-                  0);
+        vkCmdPushConstants(
+            m_command.cmd_buf, m_pipelines.at(current_material).layout,
+            VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+        vkCmdDraw(m_command.cmd_buf, m_meshes.at(current_mesh).vertices.size(),
+                  1, 0, 0);
     }
 
     // finalize the render pass and the command buffer
-    vkCmdEndRenderPass(m_cmd_buf);
-    assert(!vkEndCommandBuffer(m_cmd_buf));
+    vkCmdEndRenderPass(m_command.cmd_buf);
+    assert(!vkEndCommandBuffer(m_command.cmd_buf));
 
     // prepare the submission to the queue.
     VkPipelineStageFlags wait_stage =
@@ -318,19 +280,19 @@ void GraphicsEngine::draw() {
     VkSubmitInfo submit{
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m_semph_present,
+        .pWaitSemaphores = &m_command.semph_present,
         .pWaitDstStageMask = &wait_stage,
         .commandBufferCount = 1,
-        .pCommandBuffers = &m_cmd_buf,
+        .pCommandBuffers = &m_command.cmd_buf,
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &m_semph_render,
+        .pSignalSemaphores = &m_command.semph_render,
     };
-    assert(!vkQueueSubmit(m_q_graphics, 1, &submit, m_fence_render));
+    assert(!vkQueueSubmit(m_q_graphics, 1, &submit, m_command.fence_render));
 
     VkPresentInfoKHR present_info{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &m_semph_render,
+        .pWaitSemaphores = &m_command.semph_render,
         .swapchainCount = 1,
         .pSwapchains = &m_swapchain.swapchain,
         .pImageIndices = &swap_img_idx,
