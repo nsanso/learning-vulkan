@@ -16,6 +16,8 @@
 #include "swapchain.h"
 #include "utils.h"
 
+constexpr uint32_t FRAME_OVERLAP = 2;
+
 class GraphicsEngine {
    public:
     const uint32_t vk_version = VK_API_VERSION_1_3;
@@ -29,7 +31,7 @@ class GraphicsEngine {
     size_t m_frame_count{0};
 
     VkExtent2D m_window_extent{1280, 720};
-    struct SDL_Window *m_window{nullptr};
+    struct SDL_Window* m_window{nullptr};
 
     VkSurfaceKHR m_surface;
 
@@ -43,9 +45,11 @@ class GraphicsEngine {
     GraphicsSwapchain m_swapchain;
     GraphicsRender m_render;
 
-    GraphicsCommand m_command;
+    GraphicsCommand m_commands[FRAME_OVERLAP];
 
     std::vector<Drawable> m_drawables;
     std::vector<GraphicsPipeline> m_pipelines;
     std::vector<Mesh> m_meshes;
+
+    GraphicsCommand* get_current_command();
 };
