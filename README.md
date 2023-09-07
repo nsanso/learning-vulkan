@@ -11,5 +11,7 @@ at [vkguide.dev](https://vkguide.dev), with some differences here and there.
 ## Required tools
 
 - Git
-- cmake
+- CMake
+- Ninja
 - glslangValidator
+- vulkan-validation-layers
